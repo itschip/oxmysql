@@ -70,11 +70,6 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
-        
-        <a href="#async" class="md-skip">
-          Skip to content
-        </a>
-      
     </div>
     <div data-md-component="announce">
       
@@ -394,58 +389,9 @@
       
       
       
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          Scalar
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
       <a href="./" class="md-nav__link md-nav__link--active">
         Scalar
       </a>
-      
-        
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#async" class="md-nav__link">
-    Async
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#sync" class="md-nav__link">
-    Sync
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#async_1" class="md-nav__link">
-    Async
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#sync_1" class="md-nav__link">
-    Sync
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
       
     </li>
   
@@ -519,32 +465,32 @@
 <div class="admonition info">
 <p class="admonition-title">Example</p>
 <div class="tabbed-set" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><label for="__tabbed_1_1">Lua</label><div class="tabbed-content">
-<h4 id="async">Async<a class="headerlink" href="#async" title="Permanent link">&para;</a></h4>
+<p><strong>Async</strong>
 <div class="highlight"><pre><span></span><code><span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">scalar</span><span class="p">(</span><span class="s1">&#39;SELECT firstname FROM users WHERE identifier = ?&#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">playerIdentifier</span><span class="p">},</span> <span class="kr">function</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
     <span class="kr">if</span> <span class="n">result</span> <span class="kr">then</span>
         <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">firstname</span><span class="p">)</span>
     <span class="kr">end</span>
 <span class="kr">end</span><span class="p">)</span>
 </code></pre></div>
-<h4 id="sync">Sync<a class="headerlink" href="#sync" title="Permanent link">&para;</a></h4>
+<strong>Sync</strong>
 <div class="highlight"><pre><span></span><code><span class="kd">local</span> <span class="n">result</span> <span class="o">=</span> <span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">scalarSync</span><span class="p">(</span><span class="s1">&#39;SELECT firstname FROM users WHERE identifier = ?&#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">playerIdentifier</span><span class="p">})</span>
 <span class="kr">if</span> <span class="n">result</span> <span class="kr">then</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">.</span><span class="n">firstname</span><span class="p">)</span>
 <span class="kr">end</span>
-</code></pre></div>
+</code></pre></div></p>
 </div>
 <input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><label for="__tabbed_1_2">JavaScript</label><div class="tabbed-content">
-<h4 id="async_1">Async<a class="headerlink" href="#async_1" title="Permanent link">&para;</a></h4>
+<p><strong>Async</strong>
 <div class="highlight"><pre><span></span><code><span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">scalar</span><span class="p">(</span><span class="s1">&#39;SELECT firstname FROM users WHERE identifier = ?&#39;</span><span class="p">,</span> <span class="p">[</span><span class="nx">playerIdentifier</span><span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span> <span class="p">{</span>
   <span class="k">if</span> <span class="p">(</span><span class="nx">result</span><span class="p">)</span>
     <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">result</span><span class="p">.</span><span class="nx">firstname</span><span class="p">)</span>
 <span class="p">})</span>
 </code></pre></div>
-<h4 id="sync_1">Sync<a class="headerlink" href="#sync_1" title="Permanent link">&para;</a></h4>
+<strong>Sync</strong>
 <div class="highlight"><pre><span></span><code><span class="kd">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">scalarSync</span><span class="p">(</span><span class="s1">&#39;SELECT firstname FROM users WHERE identifier = ?&#39;</span><span class="p">,</span> <span class="p">[</span><span class="nx">playerIdentifier</span><span class="p">])</span> <span class="p">{</span>
 <span class="k">if</span> <span class="p">(</span><span class="nx">result</span><span class="p">)</span>
   <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">result</span><span class="p">.</span><span class="nx">firstname</span><span class="p">)</span>
-</code></pre></div>
+</code></pre></div></p>
 </div>
 </div>
 </div>
