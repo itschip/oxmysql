@@ -466,7 +466,7 @@ When selecting data it will return all matching rows and columns, otherwise it w
 <div class="admonition info">
 <p class="admonition-title">Example</p>
 <p>=== "Lua
-    === "Async"
+    #### Async
     <div class="highlight"><pre><span></span><code><span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">execute</span><span class="p">(</span><span class="s1">&#39;SELECT * FROM users WHERE identifier = ?&#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">playerIdentifier</span><span class="p">},</span> <span class="kr">function</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
     <span class="kr">if</span> <span class="n">result</span> <span class="kr">then</span>
         <span class="kr">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">v</span> <span class="kr">in</span> <span class="nb">pairs</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="kr">do</span>
@@ -475,7 +475,7 @@ When selecting data it will return all matching rows and columns, otherwise it w
     <span class="kr">end</span>
 <span class="kr">end</span><span class="p">)</span>
 </code></pre></div>
-    === "Sync"
+    #### Sync
     <div class="highlight"><pre><span></span><code><span class="kd">local</span> <span class="n">result</span> <span class="o">=</span> <span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">executeSync</span><span class="p">(</span><span class="s1">&#39;SELECT * FROM users WHERE identifier = ?&#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">playerIdentifier</span><span class="p">})</span>
 <span class="kr">if</span> <span class="n">result</span> <span class="kr">then</span>
     <span class="kr">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">v</span> <span class="kr">in</span> <span class="nb">pairs</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> <span class="kr">do</span>
@@ -484,21 +484,21 @@ When selecting data it will return all matching rows and columns, otherwise it w
 <span class="kr">end</span>
 </code></pre></div>
 === "JavaScript
-    === "Async"
+    #### Async
     <div class="highlight"><pre><span></span><code><span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">execute</span><span class="p">(</span><span class="s1">&#39;SELECT * FROM users WHERE identifier = ?&#39;</span><span class="p">,</span> <span class="p">[</span><span class="nx">playerIdentifier</span><span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span> <span class="p">{</span>
-  <span class="k">if</span> <span class="p">(</span><span class="nx">result</span><span class="p">)</span> <span class="p">{</span>
+<span class="k">if</span> <span class="p">(</span><span class="nx">result</span><span class="p">)</span> <span class="p">{</span>
     <span class="nx">result</span><span class="p">.</span><span class="nx">forEach</span><span class="p">((</span><span class="nx">v</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="p">{</span>
-      <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">v</span><span class="p">.</span><span class="nx">identifier</span><span class="p">,</span> <span class="nx">v</span><span class="p">.</span><span class="nx">firstname</span><span class="p">,</span> <span class="nx">v</span><span class="p">.</span><span class="nx">lastname</span><span class="p">)</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">v</span><span class="p">.</span><span class="nx">identifier</span><span class="p">,</span> <span class="nx">v</span><span class="p">.</span><span class="nx">firstname</span><span class="p">,</span> <span class="nx">v</span><span class="p">.</span><span class="nx">lastname</span><span class="p">)</span>
     <span class="p">})</span>
-  <span class="p">}</span>
+<span class="p">}</span>
 <span class="p">})</span>
 </code></pre></div>
-    === "Sync"
+    #### Async
     <div class="highlight"><pre><span></span><code><span class="kd">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">executeSync</span><span class="p">(</span><span class="s1">&#39;SELECT * FROM users WHERE identifier = ?&#39;</span><span class="p">,</span> <span class="p">[</span><span class="nx">playerIdentifier</span><span class="p">])</span> <span class="p">{</span>
 <span class="k">if</span> <span class="p">(</span><span class="nx">result</span><span class="p">)</span> <span class="p">{</span>
-  <span class="nx">result</span><span class="p">.</span><span class="nx">forEach</span><span class="p">((</span><span class="nx">v</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="p">{</span>
+<span class="nx">result</span><span class="p">.</span><span class="nx">forEach</span><span class="p">((</span><span class="nx">v</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="p">{</span>
     <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">v</span><span class="p">.</span><span class="nx">identifier</span><span class="p">,</span> <span class="nx">v</span><span class="p">.</span><span class="nx">firstname</span><span class="p">,</span> <span class="nx">v</span><span class="p">.</span><span class="nx">lastname</span><span class="p">)</span>
-  <span class="p">})</span>
+<span class="p">})</span>
 <span class="p">}</span>
 </code></pre></div></p>
 </div>

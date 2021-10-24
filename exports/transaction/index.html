@@ -544,7 +544,7 @@
 <span class="kd">local</span> <span class="n">result</span> <span class="o">=</span> <span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">transactionSync</span><span class="p">(</span><span class="n">queries</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </code></pre></div></p>
-<p>Javascript
+<p>JavaScript
 <div class="highlight"><pre><span></span><code><span class="kd">const</span> <span class="nx">queries</span> <span class="o">=</span> <span class="p">[</span>
     <span class="p">{</span> <span class="nx">query</span> <span class="o">=</span> <span class="s1">&#39;INSERT INTO `test` (id) VALUES (:someid)&#39;</span><span class="p">,</span> <span class="nx">values</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">someid</span> <span class="o">=</span> <span class="mf">1</span> <span class="p">}</span> <span class="p">},</span>
     <span class="p">{</span> <span class="nx">query</span> <span class="o">=</span> <span class="s1">&#39;INSERT INTO `test` (id) VALUES (:someid)&#39;</span><span class="p">,</span> <span class="nx">values</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">someid</span> <span class="o">=</span> <span class="mf">2</span> <span class="p">}</span> <span class="p">}</span>
@@ -579,7 +579,7 @@ This is useful if your queries use the same SQL variables.</p>
 <span class="kd">local</span> <span class="n">result</span> <span class="o">=</span> <span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">transactionSync</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">parameters</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </code></pre></div></p>
-<p>Javascript
+<p>JavaScript
 <div class="highlight"><pre><span></span><code><span class="kd">const</span> <span class="nx">queries</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s1">&#39;INSERT INTO `test` (id, name) VALUES (:someid, :somename)&#39;</span><span class="p">,</span>
     <span class="s1">&#39;SET `name` = :newname IN `test` WHERE `id` = :someid&#39;</span>

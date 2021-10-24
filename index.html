@@ -338,8 +338,8 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#_1" class="md-nav__link">
-    
+  <a href="#javascript" class="md-nav__link">
+    JavaScript
   </a>
   
 </li>
@@ -547,14 +547,14 @@ You must include one of the following lines, adjusted for your connection and da
 <div class="highlight"><pre><span></span><code>set mysql_connection_string &quot;mysql://root:12345@localhost/es_extended?charset=utf8mb4&quot;
 set mysql_connection_string &quot;user=root;database=es_extended;password=12345;charset=utf8mb4&quot;
 </code></pre></div>
-For more optional settings (such as multiple statements) you can reference <a href="https://github.com/sidorares/node-mysql2/blob/master/typings/mysql/lib/Pool.d.ts#L10">pool.d.ts</a> and <a href="https://github.com/sidorares/node-mysql2/blob/master/typings/mysql/lib/Connection.d.ts#L8">connection.d.ts</a>.</p>
-<p>You can also add the following convars if you require extra information when testing queries.
+You can also add the following convars if you require extra information when testing queries.
 <div class="highlight"><pre><span></span><code>set mysql_slow_query_warning 100
 set mysql_debug true
-</code></pre></div></p>
+</code></pre></div>
+For more optional settings (such as multiple statements) you can reference <a href="https://github.com/sidorares/node-mysql2/blob/master/typings/mysql/lib/Pool.d.ts#L10">pool.d.ts</a> and <a href="https://github.com/sidorares/node-mysql2/blob/master/typings/mysql/lib/Connection.d.ts#L8">connection.d.ts</a>.</p>
 <h2 id="sync-vs-async">Sync vs. async<a class="headerlink" href="#sync-vs-async" title="Permanent link">&para;</a></h2>
-<p>Asychronous behaviour does not <em>truly</em> exist in any of the scripting runtimes utilised, with tasks being performed in a queue each tick. 
-Two variants of exports are provided for users, and their names describe their behaviour as part of the active "thread" being executed.  </p>
+<p>Asychronous behaviour does not <em>truly</em> exist in any of the scripting runtimes utilised, with tasks being performed as part of a queue each tick.<br />
+Two variants of exports are provided for users, and their names describe their behaviour as part of the "thread" being executed.  </p>
 <p>The following export is "asynchronous" and will execute in order, however the result will be delayed until a result is returned rather than pausing execution of following code.
 <div class="highlight"><pre><span></span><code>    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;This print will display first&#39;</span><span class="p">)</span>
     <span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">scalar</span><span class="p">(</span><span class="s1">&#39;SELECT group FROM users WHERE identifier = ?&#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">playerIdentifier</span><span class="p">},</span> <span class="kr">function</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
@@ -573,8 +573,8 @@ Furthermore, the result will be returned inline (left-hand assignment) rather th
 <p><div class="highlight"><pre><span></span><code>Lua:    Low: 0.2955ms | High: 16.7566ms | Avg: 0.36956378ms |   Total: 3695.6378ms (10000 queries)
 JS:     Low: 0.2831ms | High: 5.1899ms  | Avg: 0.33495788ms |   Total: 3349.5788ms (10000 queries)
 </code></pre></div>
-These benchmark <em>exports</em> rather than actual query speed, resulting in extra delays due to serialisation and overhead. Lua generally falls <em>slightly</em> behind, but the amount is negligible. Furthermore we utilise the <em>sync</em> variants for this, so a query will only execute once the previous one has returned.</p>
-<p>Feel free to run your own tests.</p>
+These benchmark <em>exports</em> rather than actual query speed, resulting in extra delays due to serialisation and overhead. Lua generally falls <em>slightly</em> behind, but the amount is negligible.<br />
+Furthermore we utilise the <em>sync</em> variants for this, so a query will only execute once the previous one has returned.</p>
 <h4 id="lua-54">Lua (5.4)<a class="headerlink" href="#lua-54" title="Permanent link">&para;</a></h4>
 <div class="highlight"><pre><span></span><code><span class="kd">local</span> <span class="n">val</span> <span class="o">=</span> <span class="mi">10000</span>
 <span class="n">RegisterCommand</span><span class="p">(</span><span class="s1">&#39;luasync&#39;</span><span class="p">,</span> <span class="kr">function</span><span class="p">()</span>
@@ -601,7 +601,7 @@ These benchmark <em>exports</em> rather than actual query speed, resulting in ex
     <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;Low: &#39;</span><span class="o">..</span> <span class="n">queryMsLow</span> <span class="o">..</span><span class="s1">&#39;ms | High: &#39;</span><span class="o">..</span><span class="n">queryMsHigh</span><span class="o">..</span><span class="s1">&#39;ms | Avg: &#39;</span><span class="o">..</span><span class="n">averageQueryTime</span><span class="o">..</span><span class="s1">&#39;ms | Total: &#39;</span><span class="o">..</span><span class="n">queryMsSum</span><span class="o">..</span><span class="s1">&#39;ms (&#39;</span><span class="o">..#</span><span class="n">queryTimesLocal</span><span class="o">..</span><span class="s1">&#39; queries)&#39;</span><span class="p">)</span>
 <span class="kr">end</span><span class="p">)</span>
 </code></pre></div>
-<h4 id="_1"><a class="headerlink" href="#_1" title="Permanent link">&para;</a></h4>
+<h4 id="javascript">JavaScript<a class="headerlink" href="#javascript" title="Permanent link">&para;</a></h4>
 <div class="highlight"><pre><span></span><code><span class="kd">const</span> <span class="nx">val</span> <span class="o">=</span> <span class="mf">10000</span>
 <span class="nx">RegisterCommand</span><span class="p">(</span><span class="s1">&#39;jssync&#39;</span><span class="p">,</span> <span class="k">async</span><span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
     <span class="kd">const</span> <span class="nx">queryTimesLocal</span> <span class="o">=</span> <span class="p">[];</span>

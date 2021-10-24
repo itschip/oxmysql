@@ -465,27 +465,27 @@
 <div class="admonition info">
 <p class="admonition-title">Example</p>
 <p>=== "Lua
-    === "Async"
+    #### Async
     <div class="highlight"><pre><span></span><code><span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">insert</span><span class="p">(</span><span class="s1">&#39;INSERT INTO users (identifier, firstname, lastname) VALUES (?, ?, ?) &#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">playerIdentifier</span><span class="p">,</span> <span class="n">firstName</span><span class="p">,</span> <span class="n">lastName</span><span class="p">},</span> <span class="kr">function</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
     <span class="kr">if</span> <span class="n">id</span> <span class="kr">then</span>
         <span class="nb">print</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
     <span class="kr">end</span>
 <span class="kr">end</span><span class="p">)</span>
 </code></pre></div>
-    === "Sync"
+    #### Sync
     <div class="highlight"><pre><span></span><code><span class="kd">local</span> <span class="n">id</span> <span class="o">=</span> <span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">insertSync</span><span class="p">(</span><span class="s1">&#39;INSERT INTO users (identifier, firstname, lastname) VALUES (?, ?, ?) &#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">playerIdentifier</span><span class="p">,</span> <span class="n">firstName</span><span class="p">,</span> <span class="n">lastName</span><span class="p">})</span>
 <span class="kr">if</span> <span class="n">id</span> <span class="kr">then</span>
     <span class="nb">print</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
 <span class="kr">end</span>
 </code></pre></div>
 === "JavaScript
-    === "Async"
+    #### Async
     <div class="highlight"><pre><span></span><code><span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">insert</span><span class="p">(</span><span class="s1">&#39;INSERT INTO users (identifier, firstname, lastname) VALUES (?, ?, ?) &#39;</span><span class="p">,</span> <span class="p">[</span><span class="nx">playerIdentifier</span><span class="p">,</span> <span class="nx">firstName</span><span class="p">,</span> <span class="nx">lastName</span><span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">id</span><span class="p">)</span> <span class="p">{</span>
   <span class="k">if</span> <span class="p">(</span><span class="nx">id</span><span class="p">)</span>
     <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">id</span><span class="p">)</span>
 <span class="p">})</span>
 </code></pre></div>
-    === "Sync"
+    #### Sync
     <div class="highlight"><pre><span></span><code><span class="kd">const</span> <span class="nx">id</span> <span class="o">=</span> <span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">insertSync</span><span class="p">(</span><span class="s1">&#39;INSERT INTO users (identifier, firstname, lastname) VALUES (?, ?, ?) &#39;</span><span class="p">,</span> <span class="p">[</span><span class="nx">playerIdentifier</span><span class="p">,</span> <span class="nx">firstName</span><span class="p">,</span> <span class="nx">lastName</span><span class="p">])</span> <span class="p">{</span>
 <span class="k">if</span> <span class="p">(</span><span class="nx">id</span><span class="p">)</span>
   <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">id</span><span class="p">)</span>
