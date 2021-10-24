@@ -18,7 +18,7 @@
     
     
       
-        <title>Prepare - OxMySQL</title>
+        <title>Update - OxMySQL</title>
       
     
     
@@ -100,7 +100,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Prepare
+              Update
             
           </span>
         </div>
@@ -201,7 +201,7 @@
   
     <li class="md-tabs__item">
       <a href="../" class="md-tabs__link md-tabs__link--active">
-        Exports
+        Usage
       </a>
     </li>
   
@@ -309,14 +309,14 @@
       
       
         <label class="md-nav__link" for="__nav_3">
-          Exports
+          Usage
           <span class="md-nav__icon md-icon"></span>
         </label>
       
-      <nav class="md-nav" aria-label="Exports" data-md-level="1">
+      <nav class="md-nav" aria-label="Usage" data-md-level="1">
         <label class="md-nav__title" for="__nav_3">
           <span class="md-nav__icon md-icon"></span>
-          Exports
+          Usage
         </label>
         <ul class="md-nav__list" data-md-scrollfix>
           
@@ -366,19 +366,11 @@
               
   
   
-    
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
-      
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../prepare/" class="md-nav__link">
         Prepare
       </a>
-      
     </li>
   
 
@@ -430,11 +422,19 @@
               
   
   
+    
   
-    <li class="md-nav__item">
-      <a href="../update/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         Update
       </a>
+      
     </li>
   
 
@@ -459,9 +459,47 @@
               
                 
                 
-                  <h1>Prepare</h1>
+                  <h1>Update</h1>
                 
-                <p>TODO</p>
+                <p>Updates an entry in the database and returns the number of affected rows.</p>
+<div class="admonition info">
+<p class="admonition-title">Example</p>
+<div class="tabbed-set" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><label for="__tabbed_1_1">Lua</label><div class="tabbed-content">
+<p><strong>Async</strong>
+<div class="highlight"><pre><span></span><code><span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">insert</span><span class="p">(</span><span class="s1">&#39;UPDATE users SET firstname = ? WHERE identifier = ? &#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">newName</span><span class="p">,</span> <span class="n">playerIdentifier</span><span class="p">},</span> <span class="kr">function</span><span class="p">(</span><span class="n">affectedRows</span><span class="p">)</span>
+    <span class="kr">if</span> <span class="n">affectedRows</span> <span class="kr">then</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">affectedRows</span><span class="p">)</span>
+    <span class="kr">end</span>
+<span class="kr">end</span><span class="p">)</span>
+</code></pre></div>
+<strong>Sync</strong>
+<div class="highlight"><pre><span></span><code><span class="n">CreateThread</span><span class="p">(</span><span class="kr">function</span><span class="p">()</span>
+    <span class="kd">local</span> <span class="n">id</span> <span class="o">=</span> <span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">insertSync</span><span class="p">(</span><span class="s1">&#39;UPDATE users SET firstname = ? WHERE identifier = ? &#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">newName</span><span class="p">,</span> <span class="n">playerIdentifier</span><span class="p">})</span>
+    <span class="kr">if</span> <span class="n">affectedRows</span> <span class="kr">then</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">affectedRows</span><span class="p">)</span>
+    <span class="kr">end</span>
+<span class="kr">end</span><span class="p">)</span>
+</code></pre></div></p>
+</div>
+<input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><label for="__tabbed_1_2">JavaScript</label><div class="tabbed-content">
+<p><strong>Async</strong>
+<div class="highlight"><pre><span></span><code><span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">insert</span><span class="p">(</span><span class="s1">&#39;UPDATE users SET firstname = ? WHERE identifier = ? &#39;</span><span class="p">,</span> <span class="p">[</span><span class="nx">newName</span><span class="p">,</span> <span class="nx">playerIdentifier</span><span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">affectedRows</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="nx">affectedRows</span><span class="p">)</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">affectedRows</span><span class="p">)</span>
+<span class="p">})</span>
+</code></pre></div>
+<strong>Sync</strong>
+<div class="highlight"><pre><span></span><code><span class="nx">setImmediate</span><span class="p">(</span><span class="k">async</span> <span class="p">()</span> <span class="p">=&gt;</span> <span class="p">{</span>
+  <span class="kd">const</span> <span class="nx">id</span> <span class="o">=</span> <span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">insertSync</span><span class="p">(</span><span class="s1">&#39;UPDATE users SET firstname = ? WHERE identifier = ? &#39;</span><span class="p">,</span> <span class="p">[</span><span class="nx">newName</span><span class="p">,</span> <span class="nx">playerIdentifier</span><span class="p">])</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="nx">affectedRows</span><span class="p">)</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">affectedRows</span><span class="p">)</span>
+<span class="p">})</span>
+</code></pre></div></p>
+</div>
+</div>
+</div>
+                
+                  
                 
               
               
@@ -486,7 +524,7 @@
     <nav class="md-footer__inner md-grid" aria-label="Footer">
       
         
-        <a href="../insert/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Insert" rel="prev">
+        <a href="../transaction/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Transactions" rel="prev">
           <div class="md-footer__button md-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
           </div>
@@ -495,26 +533,11 @@
               <span class="md-footer__direction">
                 Previous
               </span>
-              Insert
+              Transactions
             </div>
           </div>
         </a>
       
-      
-        
-        <a href="../scalar/" class="md-footer__link md-footer__link--next" aria-label="Next: Scalar" rel="next">
-          <div class="md-footer__title">
-            <div class="md-ellipsis">
-              <span class="md-footer__direction">
-                Next
-              </span>
-              Scalar
-            </div>
-          </div>
-          <div class="md-footer__button md-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11H4z"/></svg>
-          </div>
-        </a>
       
     </nav>
   

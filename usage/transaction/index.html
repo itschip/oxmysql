@@ -18,7 +18,7 @@
     
     
       
-        <title>Insert - OxMySQL</title>
+        <title>Transactions - OxMySQL</title>
       
     
     
@@ -70,6 +70,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#transactions" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -100,7 +105,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Insert
+              Transactions
             
           </span>
         </div>
@@ -201,7 +206,7 @@
   
     <li class="md-tabs__item">
       <a href="../" class="md-tabs__link md-tabs__link--active">
-        Exports
+        Usage
       </a>
     </li>
   
@@ -309,14 +314,14 @@
       
       
         <label class="md-nav__link" for="__nav_3">
-          Exports
+          Usage
           <span class="md-nav__icon md-icon"></span>
         </label>
       
-      <nav class="md-nav" aria-label="Exports" data-md-level="1">
+      <nav class="md-nav" aria-label="Usage" data-md-level="1">
         <label class="md-nav__title" for="__nav_3">
           <span class="md-nav__icon md-icon"></span>
-          Exports
+          Usage
         </label>
         <ul class="md-nav__list" data-md-scrollfix>
           
@@ -352,19 +357,11 @@
               
   
   
-    
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
-      
-      
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../insert/" class="md-nav__link">
         Insert
       </a>
-      
     </li>
   
 
@@ -416,11 +413,78 @@
               
   
   
+    
   
-    <li class="md-nav__item">
-      <a href="../transaction/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" data-md-toggle="toc" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Transactions
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         Transactions
       </a>
+      
+        
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#specific-format" class="md-nav__link">
+    Specific Format
+  </a>
+  
+    <nav class="md-nav" aria-label="Specific Format">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#usage" class="md-nav__link">
+    Usage
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#shared-format" class="md-nav__link">
+    Shared Format
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#transaction-isolation-level" class="md-nav__link">
+    Transaction Isolation Level
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -459,41 +523,107 @@
               
                 
                 
-                  <h1>Insert</h1>
-                
-                <p>Inserts a new entry into the database and returns the insert id for the row, if valid.</p>
-<div class="admonition info">
-<p class="admonition-title">Example</p>
-<div class="tabbed-set" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><label for="__tabbed_1_1">Lua</label><div class="tabbed-content">
-<p><strong>Async</strong>
-<div class="highlight"><pre><span></span><code><span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">insert</span><span class="p">(</span><span class="s1">&#39;INSERT INTO users (identifier, firstname, lastname) VALUES (?, ?, ?) &#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">playerIdentifier</span><span class="p">,</span> <span class="n">firstName</span><span class="p">,</span> <span class="n">lastName</span><span class="p">},</span> <span class="kr">function</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
-    <span class="kr">if</span> <span class="n">id</span> <span class="kr">then</span>
-        <span class="nb">print</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
-    <span class="kr">end</span>
+                <h1 id="transactions">Transactions<a class="headerlink" href="#transactions" title="Permanent link">&para;</a></h1>
+<p>A transaction executes multiple queries and commits them only if all succeed. If one fails, none of the queries are committed. The return value is a <code>boolean</code>, which is the result of the transaction.</p>
+<h2 id="specific-format">Specific Format<a class="headerlink" href="#specific-format" title="Permanent link">&para;</a></h2>
+<p>When using the <code>Specific</code> format you must pass one parameter to the oxmysql export. In this case, the <code>queries</code> parameter contains your queries and the SQL variables unique to each query.</p>
+<p>This is useful for transactions where the queries do not share many SQL variables.</p>
+<h3 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h3>
+<p>Lua
+<div class="highlight"><pre><span></span><code><span class="kd">local</span> <span class="n">queries</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="p">{</span> <span class="n">query</span> <span class="o">=</span> <span class="s1">&#39;INSERT INTO `test` (id) VALUES (:someid)&#39;</span><span class="p">,</span> <span class="n">values</span> <span class="o">=</span> <span class="p">{</span> <span class="p">[</span><span class="s1">&#39;someid&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="p">}</span> <span class="p">},</span>
+    <span class="p">{</span> <span class="n">query</span> <span class="o">=</span> <span class="s1">&#39;INSERT INTO `test` (id) VALUES (:someid)&#39;</span><span class="p">,</span> <span class="n">values</span> <span class="o">=</span> <span class="p">{</span> <span class="p">[</span><span class="s1">&#39;someid&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span> <span class="p">}</span> <span class="p">}</span>
+<span class="p">}</span> <span class="c1">-- NOTE, the &#39;values&#39; tables can be named &#39;parameters&#39; here for MySQL-Async compatibility.</span>
+
+<span class="c1">-- Async</span>
+<span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">transaction</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="kr">function</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> 
+    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> 
 <span class="kr">end</span><span class="p">)</span>
-</code></pre></div>
-<strong>Sync</strong>
-<div class="highlight"><pre><span></span><code><span class="kd">local</span> <span class="n">id</span> <span class="o">=</span> <span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">insertSync</span><span class="p">(</span><span class="s1">&#39;INSERT INTO users (identifier, firstname, lastname) VALUES (?, ?, ?) &#39;</span><span class="p">,</span> <span class="p">{</span><span class="n">playerIdentifier</span><span class="p">,</span> <span class="n">firstName</span><span class="p">,</span> <span class="n">lastName</span><span class="p">})</span>
-<span class="kr">if</span> <span class="n">id</span> <span class="kr">then</span>
-    <span class="nb">print</span><span class="p">(</span><span class="n">id</span><span class="p">)</span>
-<span class="kr">end</span>
+
+<span class="c1">-- Sync</span>
+<span class="kd">local</span> <span class="n">result</span> <span class="o">=</span> <span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">transactionSync</span><span class="p">(</span><span class="n">queries</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </code></pre></div></p>
-</div>
-<input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><label for="__tabbed_1_2">JavaScript</label><div class="tabbed-content">
-<p><strong>Async</strong>
-<div class="highlight"><pre><span></span><code><span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">insert</span><span class="p">(</span><span class="s1">&#39;INSERT INTO users (identifier, firstname, lastname) VALUES (?, ?, ?) &#39;</span><span class="p">,</span> <span class="p">[</span><span class="nx">playerIdentifier</span><span class="p">,</span> <span class="nx">firstName</span><span class="p">,</span> <span class="nx">lastName</span><span class="p">],</span> <span class="kd">function</span><span class="p">(</span><span class="nx">id</span><span class="p">)</span> <span class="p">{</span>
-  <span class="k">if</span> <span class="p">(</span><span class="nx">id</span><span class="p">)</span>
-    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">id</span><span class="p">)</span>
+<p>JavaScript
+<div class="highlight"><pre><span></span><code><span class="kd">const</span> <span class="nx">queries</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span> <span class="nx">query</span> <span class="o">=</span> <span class="s1">&#39;INSERT INTO `test` (id) VALUES (:someid)&#39;</span><span class="p">,</span> <span class="nx">values</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">someid</span> <span class="o">=</span> <span class="mf">1</span> <span class="p">}</span> <span class="p">},</span>
+    <span class="p">{</span> <span class="nx">query</span> <span class="o">=</span> <span class="s1">&#39;INSERT INTO `test` (id) VALUES (:someid)&#39;</span><span class="p">,</span> <span class="nx">values</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">someid</span> <span class="o">=</span> <span class="mf">2</span> <span class="p">}</span> <span class="p">}</span>
+<span class="p">]</span> <span class="c1">// NOTE, the &#39;values&#39; objects can be named &#39;parameters&#39; here for MySQL-Async compatibility.</span>
+
+<span class="c1">// Async</span>
+<span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">transaction</span><span class="p">(</span><span class="nx">queries</span><span class="p">,</span> <span class="p">(</span><span class="nx">result</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span>
 <span class="p">})</span>
-</code></pre></div>
-<strong>Sync</strong>
-<div class="highlight"><pre><span></span><code><span class="kd">const</span> <span class="nx">id</span> <span class="o">=</span> <span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">insertSync</span><span class="p">(</span><span class="s1">&#39;INSERT INTO users (identifier, firstname, lastname) VALUES (?, ?, ?) &#39;</span><span class="p">,</span> <span class="p">[</span><span class="nx">playerIdentifier</span><span class="p">,</span> <span class="nx">firstName</span><span class="p">,</span> <span class="nx">lastName</span><span class="p">])</span> <span class="p">{</span>
-<span class="k">if</span> <span class="p">(</span><span class="nx">id</span><span class="p">)</span>
-  <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">id</span><span class="p">)</span>
+
+<span class="c1">// Sync</span>
+<span class="kd">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">transactionSync</span><span class="p">(</span><span class="nx">queries</span><span class="p">)</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span>
 </code></pre></div></p>
-</div>
-</div>
-</div>
+<h3 id="shared-format">Shared Format<a class="headerlink" href="#shared-format" title="Permanent link">&para;</a></h3>
+<p>When using the <code>Shared</code> format you must pass two parameters to the oxmysql export. The <code>queries</code> and the <code>parameters</code> those queries will use.<br />
+This is useful if your queries use the same SQL variables.</p>
+<p>Lua
+<div class="highlight"><pre><span></span><code><span class="kd">local</span> <span class="n">queries</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;INSERT INTO `test` (id, name) VALUES (:someid, :somename)&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;SET `name` = :newname IN `test` WHERE `id` = :someid&#39;</span>
+<span class="p">}</span>
+
+<span class="kd">local</span> <span class="n">parameters</span> <span class="o">=</span> <span class="p">{</span> <span class="p">[</span><span class="s1">&#39;someid&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;somename&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;John Doe&#39;</span><span class="p">,</span> <span class="p">[</span><span class="s1">&#39;newname&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;John Notdoe&#39;</span> <span class="p">}</span>
+
+<span class="c1">-- Async</span>
+<span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">transaction</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">parameters</span><span class="p">,</span> <span class="kr">function</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> 
+    <span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span> 
+<span class="kr">end</span><span class="p">)</span>
+
+<span class="c1">-- Sync</span>
+<span class="kd">local</span> <span class="n">result</span> <span class="o">=</span> <span class="n">exports</span><span class="p">.</span><span class="n">oxmysql</span><span class="p">:</span><span class="n">transactionSync</span><span class="p">(</span><span class="n">queries</span><span class="p">,</span> <span class="n">parameters</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
+</code></pre></div></p>
+<p>JavaScript
+<div class="highlight"><pre><span></span><code><span class="kd">const</span> <span class="nx">queries</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s1">&#39;INSERT INTO `test` (id, name) VALUES (:someid, :somename)&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;SET `name` = :newname IN `test` WHERE `id` = :someid&#39;</span>
+<span class="p">]</span>
+
+<span class="kd">const</span> <span class="nx">parameters</span> <span class="o">=</span> <span class="p">{</span> <span class="nx">someid</span> <span class="o">=</span> <span class="mf">2</span><span class="p">,</span> <span class="nx">somename</span> <span class="o">=</span> <span class="s1">&#39;John Doe&#39;</span><span class="p">,</span> <span class="nx">newname</span> <span class="o">=</span> <span class="s1">&#39;John Notdoe&#39;</span> <span class="p">}</span>
+
+<span class="c1">// Async</span>
+<span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">transaction</span><span class="p">(</span><span class="nx">queries</span><span class="p">,</span> <span class="nx">parameters</span><span class="p">,</span> <span class="p">(</span><span class="nx">result</span><span class="p">)</span> <span class="p">=&gt;</span> <span class="p">{</span>
+    <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span>
+<span class="p">})</span>
+
+<span class="c1">// Sync</span>
+<span class="kd">const</span> <span class="nx">result</span> <span class="o">=</span> <span class="k">await</span> <span class="nx">exports</span><span class="p">.</span><span class="nx">oxmysql</span><span class="p">.</span><span class="nx">transactionSync</span><span class="p">(</span><span class="nx">queries</span><span class="p">,</span> <span class="nx">parameters</span><span class="p">)</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">result</span><span class="p">)</span>
+</code></pre></div></p>
+<h2 id="transaction-isolation-level">Transaction Isolation Level<a class="headerlink" href="#transaction-isolation-level" title="Permanent link">&para;</a></h2>
+<p>This can be set through the convar <code>mysql_transaction_isolation_level</code> which should be an integer ranging from <code>1-4</code>. The default convar value set by oxmysql is <code>2</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Convar Value</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Repeatable Read</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Read Committed</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Read Uncommitted</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Serializable</td>
+</tr>
+</tbody>
+</table>
                 
                   
                 
@@ -520,7 +650,7 @@
     <nav class="md-footer__inner md-grid" aria-label="Footer">
       
         
-        <a href="../execute/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Execute" rel="prev">
+        <a href="../single/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Single" rel="prev">
           <div class="md-footer__button md-icon">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12z"/></svg>
           </div>
@@ -529,20 +659,20 @@
               <span class="md-footer__direction">
                 Previous
               </span>
-              Execute
+              Single
             </div>
           </div>
         </a>
       
       
         
-        <a href="../prepare/" class="md-footer__link md-footer__link--next" aria-label="Next: Prepare" rel="next">
+        <a href="../update/" class="md-footer__link md-footer__link--next" aria-label="Next: Update" rel="next">
           <div class="md-footer__title">
             <div class="md-ellipsis">
               <span class="md-footer__direction">
                 Next
               </span>
-              Prepare
+              Update
             </div>
           </div>
           <div class="md-footer__button md-icon">
