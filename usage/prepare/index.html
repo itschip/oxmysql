@@ -414,7 +414,7 @@
   
     <li class="md-nav__item">
       <a href="../transaction/" class="md-nav__link">
-        Transaction
+        transaction
       </a>
     </li>
   
@@ -457,10 +457,12 @@
   <h1>prepare</h1>
 
 <p>The only function that provides true <a href="https://github.com/sidorares/node-mysql2#using-prepared-statements">prepared statements</a>, granting native protection and query planning by MySQL.<br />
-Prepare can be used to execute frequently called queries faster and accepts multiple sets of parameters to be used with a single query.<br />
-- Date will not return the datestring commonly used in FiveM
-- TINYINT 1 and BIT will not return a boolean
-- You can only use <code>?</code> value placeholders, <code>??</code> column placeholders and named placeholders will throw an error  </p>
+Prepare can be used to execute frequently called queries faster and accepts multiple sets of parameters to be used with a single query.  </p>
+<ul>
+<li>Date will not return the datestring commonly used in FiveM</li>
+<li>TINYINT 1 and BIT will not return a boolean</li>
+<li>You can only use <code>?</code> value placeholders, <code>??</code> column placeholders and named placeholders will throw an error  </li>
+</ul>
 <p>When using SELECT, the return value will match <code>fetchAll, fetchSingle, or fetchScalar</code> depending on the number of columns and rows selected.</p>
 <div class="admonition info">
 <p class="admonition-title">Example</p>
@@ -586,13 +588,13 @@ Prepare can be used to execute frequently called queries faster and accepts mult
       
       
         
-        <a href="../transaction/" class="md-footer__link md-footer__link--next" aria-label="Next: Transaction" rel="next">
+        <a href="../transaction/" class="md-footer__link md-footer__link--next" aria-label="Next: transaction" rel="next">
           <div class="md-footer__title">
             <div class="md-ellipsis">
               <span class="md-footer__direction">
                 Next
               </span>
-              Transaction
+              transaction
             </div>
           </div>
           <div class="md-footer__button md-icon">
