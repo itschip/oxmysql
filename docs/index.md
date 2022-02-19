@@ -23,6 +23,15 @@ You can also add the following convars if you require extra information when tes
 set mysql_slow_query_warning 150
 set mysql_debug true
 ```
+### Using the UI
+!!! info
+        Before using the UI first you have to make sure you have the `mysql_ui` convar set to true:
+        ```
+        set mysql_ui true
+        ```
+        Also make sure that you have `command` ace permission access, then you should be able to use the
+        `mysql` command in game to open up the UI and see your query data.
+
 For more optional settings (such as multiple statements) you can reference [pool.d.ts](https://github.com/sidorares/node-mysql2/blob/master/typings/mysql/lib/Pool.d.ts#L10) and [connection.d.ts](https://github.com/sidorares/node-mysql2/blob/master/typings/mysql/lib/Connection.d.ts#L8).
 
 
