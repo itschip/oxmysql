@@ -152,4 +152,176 @@ function MySQL.startTransaction(cb)
 	return oxmysql:startTransaction(cb, resourceName)
 end
 
+local function builderRecord(value, fields, label)
+	assert(type(value) == 'table' and getmetatable(value) == nil, 'queryBuilder: ' .. label .. ' must be a plain table')
+	for key in pairs(value) do
+		assert(fields[key], 'queryBuilder: unsupported ' .. label .. ' field')
+	end
+	return value
+end
+
+local function builderArray(value, label, map, allowEmpty)
+	assert(type(value) == 'table' and getmetatable(value) == nil, 'queryBuilder: ' .. label .. ' must be a dense array')
+	local length = #value
+	local count = 0
+	for key in pairs(value) do
+		assert(type(key) == 'number' and key >= 1 and key <= length and key % 1 == 0, 'queryBuilder: ' .. label .. ' must be a dense array')
+		count = count + 1
+	end
+	assert(count == length and (allowEmpty or length > 0), 'queryBuilder: ' .. label .. ' must be a dense array with the required elements')
+	local result = {}
+	for index = 1, length do
+		result[index] = map(value[index])
+	end
+	return result
+end
+
+local function builderValue(value)
+	local valueType = type(value)
+	assert(valueType == 'string' or valueType == 'boolean' or
+		(valueType == 'number' and value == value and value ~= math.huge and value ~= -math.huge),
+		'queryBuilder: values must be non-null strings, booleans, or finite numbers')
+	return value
+end
+
+local function identifierPart(part)
+	assert(type(part) == 'string' and part:find('%S') and not part:find('[.*?%c]'),
+		'queryBuilder: invalid identifier segment')
+	return part
+end
+
+local function builderIdentifier(name)
+	assert(type(name) == 'string' and #name > 0 and not name:find('^%.') and not name:find('%.$') and not name:find('%.%.'),
+		'queryBuilder: expected a non-empty dot-separated identifier')
+	local parts = {}
+	for part in name:gmatch('[^.]+') do
+		parts[#parts + 1] = identifierPart(part)
+	end
+	return { kind = 'identifier', parts = parts }
+end
+
+local function copyIdentifier(value)
+	builderRecord(value, { kind = true, parts = true }, 'identifier')
+	assert(value.kind == 'identifier', 'queryBuilder: expected identifier kind')
+	return { kind = 'identifier', parts = builderArray(value.parts, 'identifier parts', identifierPart) }
+end
+
+local function copyPredicate(value, depth)
+	depth = depth or 0
+	assert(depth < 64, 'queryBuilder: predicate nesting exceeds 64 levels')
+	builderRecord(value, { kind = true, operator = true, column = true, value = true, values = true, predicates = true }, 'predicate')
+	if value.kind == 'comparison' then
+		builderRecord(value, { kind = true, operator = true, column = true, value = true }, 'comparison')
+		assert(value.operator == 'eq', 'queryBuilder: unsupported comparison operator')
+		return { kind = 'comparison', operator = 'eq', column = copyIdentifier(value.column), value = builderValue(value.value) }
+	elseif value.kind == 'collection' then
+		builderRecord(value, { kind = true, operator = true, column = true, values = true }, 'collection')
+		assert(value.operator == 'inArray', 'queryBuilder: unsupported collection operator')
+		return { kind = 'collection', operator = 'inArray', column = copyIdentifier(value.column), values = builderArray(value.values, 'inArray values', builderValue, true) }
+	elseif value.kind == 'group' then
+		builderRecord(value, { kind = true, operator = true, predicates = true }, 'group')
+		assert(value.operator == 'allOf', 'queryBuilder: unsupported group operator')
+		return { kind = 'group', operator = 'allOf', predicates = builderArray(value.predicates, 'allOf predicates', function(child)
+			return copyPredicate(child, depth + 1)
+		end) }
+	end
+
+	error('queryBuilder: unsupported predicate kind')
+end
+
+MySQL.op = {
+	eq = function(column, value)
+		return { kind = 'comparison', operator = 'eq', column = builderIdentifier(column), value = builderValue(value) }
+	end,
+	inArray = function(column, values)
+		return { kind = 'collection', operator = 'inArray', column = builderIdentifier(column), values = builderArray(values, 'inArray values', builderValue, true) }
+	end,
+	allOf = function(...)
+		local predicates = { ... }
+		assert(select('#', ...) == #predicates, 'queryBuilder: allOf requires non-nil predicates')
+		return { kind = 'group', operator = 'allOf', predicates = builderArray(predicates, 'allOf predicates', copyPredicate) }
+	end,
+}
+
+local builderStates = setmetatable({}, { __mode = 'k' })
+local builderMethods = {}
+local builderMt = {
+	__index = function(_, key)
+		assert(builderMethods[key], 'queryBuilder: unsupported builder method ' .. tostring(key))
+		return builderMethods[key]
+	end,
+	__newindex = function() error('queryBuilder: builder state is immutable') end,
+	__metatable = false,
+}
+
+local function newBuilder(spec)
+	local builder = setmetatable({}, builderMt)
+	builderStates[builder] = spec
+	return builder
+end
+
+local function copyState(builder)
+	local state = assert(builderStates[builder], 'queryBuilder: expected builder; use colon syntax for chain methods')
+	local spec = {}
+	for key, value in pairs(state) do spec[key] = value end
+	return spec
+end
+
+function MySQL.table(name)
+	return newBuilder({ kind = 'select', from = builderIdentifier(name), columns = '*' })
+end
+
+function builderMethods:select(columns)
+	local spec = copyState(self)
+	spec.columns = builderArray(columns, 'select columns', builderIdentifier)
+	return newBuilder(spec)
+end
+
+function builderMethods:where(predicate)
+	local spec = copyState(self)
+	predicate = copyPredicate(predicate)
+	if spec.where then
+		local predicates = {}
+		if spec.where.kind == 'group' then
+			for index, child in ipairs(spec.where.predicates) do predicates[index] = child end
+		else
+			predicates[1] = spec.where
+		end
+		predicates[#predicates + 1] = predicate
+		spec.where = { kind = 'group', operator = 'allOf', predicates = predicates }
+	else
+		spec.where = predicate
+	end
+	return newBuilder(spec)
+end
+
+function builderMethods:limit(limit)
+	assert(type(limit) == 'number' and limit >= 0 and limit <= 9007199254740991 and limit % 1 == 0,
+		'queryBuilder: limit must be a non-negative safe integer')
+	local spec = copyState(self)
+	spec.limit = limit
+	return newBuilder(spec)
+end
+
+local function executeBuilder(builder, mode, cb)
+	local spec = copyState(builder)
+	spec.from = copyIdentifier(spec.from)
+	if spec.columns ~= '*' then spec.columns = builderArray(spec.columns, 'select columns', copyIdentifier) end
+	if spec.where then spec.where = copyPredicate(spec.where) end
+	if mode == 'single' then spec.limit = math.min(spec.limit or 1, 1) end
+	if cb ~= nil then
+		assert(type(cb) == 'function' or (type(cb) == 'table' and cb.__cfx_functionReference), 'queryBuilder: callback must be a function')
+		return oxmysql.queryBuilder(nil, spec, mode, cb, resourceName, options.return_callback_errors)
+	end
+	return await(oxmysql.queryBuilder, spec, mode)
+end
+
+function builderMethods:get(cb)
+	return executeBuilder(self, 'query', cb)
+end
+
+function builderMethods:first(cb)
+	return executeBuilder(self, 'single', cb)
+end
+
 _ENV.MySQL = MySQL
