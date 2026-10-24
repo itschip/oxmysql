@@ -1,7 +1,7 @@
 import type { QueryDialect } from './dialect';
 import type { CompiledQuery } from './types';
 
-function record(value: unknown, fields: string[], label: string): Record<string, unknown> {
+function record(value: unknown, fields: readonly string[] | null, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error(`queryBuilder: ${label} must be a plain object.`);
 
@@ -10,7 +10,7 @@ function record(value: unknown, fields: string[], label: string): Record<string,
     throw new Error(`queryBuilder: ${label} must be a plain object.`);
 
   for (const key of Reflect.ownKeys(value)) {
-    if (typeof key !== 'string' || !fields.includes(key) || !('value' in Object.getOwnPropertyDescriptor(value, key)!))
+    if (typeof key !== 'string' || (fields && !fields.includes(key)) || !('value' in Object.getOwnPropertyDescriptor(value, key)!))
       throw new Error(`queryBuilder: unsupported ${label} field.`);
   }
 
@@ -29,8 +29,7 @@ function array(value: unknown, label: string, allowEmpty = false): unknown[] {
 }
 
 export function compileQuery(input: unknown, dialect: QueryDialect): CompiledQuery {
-  const spec = record(input, ['kind', 'from', 'columns', 'where', 'limit'], 'select');
-  if (spec.kind !== 'select') throw new Error('queryBuilder: unsupported statement kind; expected select.');
+  const spec = record(input, null, 'statement');
 
   const parameters: unknown[] = [];
   const bind = (value: unknown): string => {
@@ -80,15 +79,56 @@ export function compileQuery(input: unknown, dialect: QueryDialect): CompiledQue
     }
   };
 
-  const columns = spec.columns === '*' ? '*' : array(spec.columns, 'select columns').map(identifier).join(', ');
-  let sql = `SELECT ${columns} FROM ${identifier(spec.from)}`;
+  const valuesMap = (input: unknown): { values: Record<string, unknown>; keys: string[]; columns: string[] } => {
+    const values = record(input, null, 'values');
+    const keys = Object.keys(values).sort();
+    if (!keys.length || keys.length !== Reflect.ownKeys(values).length)
+      throw new Error('queryBuilder: values must be a non-empty map with enumerable column names.');
+    const columns = keys.map((key) => identifier({ kind: 'identifier', parts: [key] }));
+    return { values, keys, columns };
+  };
 
-  if (Object.hasOwn(spec, 'where')) sql += ` WHERE ${predicate(spec.where)}`;
-  if (Object.hasOwn(spec, 'limit')) {
-    if (typeof spec.limit !== 'number' || !Number.isSafeInteger(spec.limit) || spec.limit < 0)
-      throw new Error('queryBuilder: limit must be a non-negative safe integer.');
-
-    sql += ` LIMIT ${bind(spec.limit)}`;
+  let sql: string;
+  switch (spec.kind) {
+    case 'select': {
+      record(spec, ['kind', 'from', 'columns', 'where', 'limit'], 'select');
+      const columns = spec.columns === '*' ? '*' : array(spec.columns, 'select columns').map(identifier).join(', ');
+      sql = `SELECT ${columns} FROM ${identifier(spec.from)}`;
+      if (Object.hasOwn(spec, 'where')) sql += ` WHERE ${predicate(spec.where)}`;
+      if (Object.hasOwn(spec, 'limit')) {
+        if (typeof spec.limit !== 'number' || !Number.isSafeInteger(spec.limit) || spec.limit < 0)
+          throw new Error('queryBuilder: limit must be a non-negative safe integer.');
+        sql += ` LIMIT ${bind(spec.limit)}`;
+      }
+      break;
+    }
+    case 'insert': {
+      record(spec, ['kind', 'into', 'rows'], 'insert');
+      const table = identifier(spec.into);
+      const rows = array(spec.rows, 'insert rows').map(valuesMap);
+      const { keys, columns } = rows[0];
+      const tuples = rows.map((row) => {
+        if (row.keys.length !== keys.length || row.keys.some((key, index) => key !== keys[index]))
+          throw new Error('queryBuilder: insert rows must have the same column names.');
+        return `(${keys.map((key) => bind(row.values[key])).join(', ')})`;
+      });
+      sql = `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${tuples.join(', ')}`;
+      break;
+    }
+    case 'update': {
+      record(spec, ['kind', 'table', 'values', 'where', 'allowAll'], 'update');
+      if (Object.hasOwn(spec, 'allowAll') && typeof spec.allowAll !== 'boolean')
+        throw new Error('queryBuilder: allowAll must be a boolean.');
+      if (!Object.hasOwn(spec, 'where') && spec.allowAll !== true)
+        throw new Error('queryBuilder: update requires a predicate or allowAll().');
+      const table = identifier(spec.table);
+      const { values, keys, columns } = valuesMap(spec.values);
+      sql = `UPDATE ${table} SET ${keys.map((key, index) => `${columns[index]} = ${bind(values[key])}`).join(', ')}`;
+      if (Object.hasOwn(spec, 'where')) sql += ` WHERE ${predicate(spec.where)}`;
+      break;
+    }
+    default:
+      throw new Error('queryBuilder: unsupported statement kind; expected select, insert, or update.');
   }
 
   return { sql, parameters };

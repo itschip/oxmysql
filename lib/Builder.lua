@@ -67,6 +67,16 @@ local function identifierPart(part)
 	return part
 end
 
+local function builderValues(values)
+	assert(type(values) == 'table' and getmetatable(values) == nil and next(values) ~= nil,
+		'queryBuilder: values must be a non-empty plain table of column names and scalar values')
+	local result = {}
+	for column, value in pairs(values) do
+		result[identifierPart(column)] = builderValue(value)
+	end
+	return result
+end
+
 local function builderIdentifier(name)
 	assert(type(name) == 'string' and #name > 0 and not name:find('^%.') and not name:find('%.$') and not name:find('%.%.'),
 		'queryBuilder: expected a non-empty dot-separated identifier')
@@ -180,12 +190,13 @@ function builderMethods:limit(limit)
 	return newBuilder(spec)
 end
 
-local function executeBuilder(builder, mode, cb)
-	local spec = copyState(builder)
-	spec.from = copyIdentifier(spec.from)
-	if spec.columns ~= '*' then spec.columns = builderArray(spec.columns, 'select columns', copyIdentifier) end
-	if spec.where then spec.where = copyPredicate(spec.where) end
-	if mode == 'single' then spec.limit = math.min(spec.limit or 1, 1) end
+function builderMethods:allowAll()
+	local spec = copyState(self)
+	spec.allowAll = true
+	return newBuilder(spec)
+end
+
+local function executeBuilder(spec, mode, cb)
 	if cb ~= nil then
 		assert(type(cb) == 'function' or (type(cb) == 'table' and cb.__cfx_functionReference), 'queryBuilder: callback must be a function')
 		return oxmysql.queryBuilder(nil, spec, mode, cb, resourceName, options.return_callback_errors)
@@ -193,12 +204,58 @@ local function executeBuilder(builder, mode, cb)
 	return await(oxmysql.queryBuilder, spec, mode)
 end
 
+local function selectSpec(builder, first)
+	local spec = copyState(builder)
+	assert(spec.allowAll == nil, 'queryBuilder: allowAll() is only supported for update')
+	spec.from = copyIdentifier(spec.from)
+	if spec.columns ~= '*' then spec.columns = builderArray(spec.columns, 'select columns', copyIdentifier) end
+	if spec.where then spec.where = copyPredicate(spec.where) end
+	if first then spec.limit = math.min(spec.limit or 1, 1) end
+	return spec
+end
+
 function builderMethods:get(cb)
-	return executeBuilder(self, 'query', cb)
+	return executeBuilder(selectSpec(self), 'query', cb)
 end
 
 function builderMethods:first(cb)
-	return executeBuilder(self, 'single', cb)
+	return executeBuilder(selectSpec(self, true), 'single', cb)
+end
+
+local function mutationState(builder)
+	local spec = copyState(builder)
+	assert(spec.columns == '*' and spec.limit == nil, 'queryBuilder: insert/update do not support select() or limit()')
+	return spec
+end
+
+function builderMethods:insert(values, cb)
+	local state = mutationState(self)
+	assert(state.where == nil and state.allowAll == nil, 'queryBuilder: insert does not support where() or allowAll()')
+	assert(type(values) == 'table' and getmetatable(values) == nil, 'queryBuilder: insert requires a row or a dense array of rows')
+	local rows
+	if type(next(values)) == 'number' or rawget(values, 1) ~= nil then
+		rows = builderArray(values, 'insert rows', builderValues)
+	else
+		rows = { builderValues(values) }
+	end
+	for index = 2, #rows do
+		for column in pairs(rows[1]) do
+			assert(rows[index][column] ~= nil, 'queryBuilder: insert rows must have the same column names')
+		end
+		for column in pairs(rows[index]) do
+			assert(rows[1][column] ~= nil, 'queryBuilder: insert rows must have the same column names')
+		end
+	end
+	return executeBuilder({ kind = 'insert', into = copyIdentifier(state.from), rows = rows }, 'insert', cb)
+end
+
+function builderMethods:update(values, cb)
+	local state = mutationState(self)
+	assert(state.where ~= nil or state.allowAll == true, 'queryBuilder: update requires a predicate or allowAll()')
+	local spec = { kind = 'update', table = copyIdentifier(state.from), values = builderValues(values) }
+	if state.where then spec.where = copyPredicate(state.where) end
+	if state.allowAll then spec.allowAll = true end
+	return executeBuilder(spec, 'update', cb)
 end
 
 _ENV.Builder = Builder

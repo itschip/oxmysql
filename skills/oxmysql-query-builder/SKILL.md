@@ -1,11 +1,11 @@
 ---
 name: oxmysql-query-builder
-description: Write, migrate, or debug FiveM server Lua queries using oxmysql's Builder import and fluent SELECT query builder. Use for Builder.table, Builder.op, builder imports, predicates, and callback or awaited execution. Covers the implemented SELECT subset; use MySQL raw SQL APIs for unsupported operations.
+description: Write, migrate, or debug FiveM server Lua queries using oxmysql's Builder import and fluent SELECT, INSERT, and UPDATE query builder. Use for Builder.table, Builder.op, builder imports, predicates, and callback or awaited execution. Use MySQL raw SQL APIs for unsupported operations.
 ---
 
 # oxmysql query builder
 
-Use the standalone `Builder` Lua API to construct parameterized SELECT queries. The current implementation supports MySQL and is a proof of concept. The broader query builder specification includes proposed APIs that are not implemented yet.
+Use the standalone `Builder` Lua API to construct parameterized SELECT, INSERT, and UPDATE queries. The current implementation supports MySQL. The broader query builder specification includes proposed APIs that are not implemented yet.
 
 ## Resource setup
 
@@ -31,6 +31,9 @@ The two imports are independent and can appear in either order. Builder-only res
 - `:limit(number)` sets a non-negative safe integer limit, including zero.
 - `:get(callback?)` returns a list of rows.
 - `:first(callback?)` returns one row or `nil`. It caps the limit at one and preserves an explicit zero limit.
+- `:insert(rowOrRows, callback?)` accepts one non-empty column/value map or a dense array of maps with identical keys. It returns the insert ID (the first generated ID for multiple rows).
+- `:update(values, callback?)` accepts a non-empty column/value map and returns affected rows. It requires a predicate unless `:allowAll()` is explicitly called.
+- `:allowAll()` permits an update without a predicate. A supplied predicate is still honored. It returns a new builder and is rejected by SELECT and INSERT terminals.
 - `Builder.op.eq(column, value)` creates an equality predicate.
 - `Builder.op.inArray(column, values)` creates an IN predicate from a dense array. An empty array matches no rows.
 - `Builder.op.allOf(...)` combines one or more predicates with AND.
@@ -50,6 +53,9 @@ local staff = base
 
 local user = base:where(op.eq('id', userId)):first()
 
+local insertId = base:insert({ name = 'Avery', active = true })
+local changed = base:where(op.eq('id', insertId)):update({ active = false })
+
 local matching = base:where(op.allOf(
     op.eq('active', true),
     op.eq('role', 'admin')
@@ -58,7 +64,7 @@ local matching = base:where(op.allOf(
 
 ## Execution and errors
 
-Without a callback, `:get()` and `:first()` await internally and return results directly. Call them from a FiveM context that can yield, such as a thread or a suitable server handler. Do not append `.await` to builder methods.
+Without a callback, `:get()`, `:first()`, `:insert()`, and `:update()` await internally and return results directly. Call them from a FiveM context that can yield, such as a thread or a suitable server handler. Do not append `.await` to builder methods.
 
 With a callback, results are delivered to the callback:
 
@@ -78,16 +84,18 @@ Values must be non-null strings, booleans, or finite numbers. `false` and zero a
 
 Table and column names are validated dot-separated identifiers, such as `users.id`; the compiler quotes each segment. Empty segments, wildcards, control characters, and `?` are rejected. Choose identifiers from application code or an allowlist. Supply user input as predicate values; never interpolate it into SQL or identifier names.
 
+INSERT and UPDATE map keys must be unqualified column names, such as `name`; dotted keys are rejected. Mutation values follow the scalar rules above. Mutations reject `select()` and `limit()`; INSERT also rejects `where()` and `allowAll()`. Do not reuse a SELECT chain containing these clauses for a mutation.
+
 ## Unsupported queries
 
-The current builder has no insert, update, delete, ordering, offset, joins, aggregates, aliases, distinct, raw expressions, null checks, OR/NOT groups, or comparison operators beyond `eq` and `inArray`. There is no public JavaScript/TypeScript builder or PostgreSQL support.
+The current builder has no delete, ordering, offset, joins, aggregates, aliases, distinct, raw expressions, null checks, OR/NOT groups, or comparison operators beyond `eq` and `inArray`. There is no public JavaScript/TypeScript builder or PostgreSQL support.
 
 For those operations, use the existing parameterized `MySQL` functions unless the user explicitly asks to extend the builder. For example:
 
 ```lua
-local changed = MySQL.update.await(
-    'UPDATE users SET active = ? WHERE id = ?',
-    { false, userId }
+local removed = MySQL.update.await(
+    'DELETE FROM sessions WHERE user_id = ?',
+    { userId }
 )
 ```
 

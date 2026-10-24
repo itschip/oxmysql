@@ -52,6 +52,18 @@ test('registers only the dedicated builder export while retaining raw exports an
     conn.queue.push([{ raw: 7 }]);
     expect(await registered.get('query_async')!('SELECT ? AS raw', [7], 'raw-resource')).toEqual([{ raw: 7 }]);
     expect(conn.calls[2].arg).toEqual({ sql: 'SELECT ? AS raw', values: [7] });
+
+    for (const [spec, mode, header, expected] of [
+      [{ kind: 'insert', into: { kind: 'identifier', parts: ['users'] }, rows: [{ name: 'Avery' }] }, 'insert', { insertId: 42, affectedRows: 1 }, 42],
+      [{ kind: 'update', table: { kind: 'identifier', parts: ['users'] }, values: { active: false }, allowAll: true }, 'update', { insertId: 0, affectedRows: 3 }, 3],
+    ] as const) {
+      conn.queue.push(header);
+      const result = await new Promise((resolve, reject) => {
+        registered.get('queryBuilder')!(spec, mode,
+          (result: unknown, error: string) => error ? reject(new Error(error)) : resolve(result), 'lua-resource', true);
+      });
+      expect(result).toBe(expected);
+    }
   } finally {
     natives.exports = previousExports;
     natives.on = previousOn;

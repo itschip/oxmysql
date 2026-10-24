@@ -93,8 +93,102 @@ describe('query builder compiler', () => {
 
   test('rejects prototypes, accessors, extra array keys and symbols', () => {
     expect(() => compile(Object.create(base))).toThrow('plain object');
-    expect(() => compile({ ...base, get limit() { throw new Error('must not run'); } })).toThrow('unsupported select field');
-    expect(() => compile({ ...base, [Symbol('raw')]: 'bad' })).toThrow('unsupported select field');
+    expect(() => compile({ ...base, get limit() { throw new Error('must not run'); } })).toThrow('unsupported statement field');
+    expect(() => compile({ ...base, [Symbol('raw')]: 'bad' })).toThrow('unsupported statement field');
     expect(() => compile({ ...base, where: inArray(Object.assign([1], { extra: 2 })) })).toThrow('dense array');
+  });
+});
+
+describe('mutation compiler', () => {
+  const insert = { kind: 'insert', into: id('users'), rows: [{ name: 'Avery', active: true }] };
+  const update = { kind: 'update', table: id('users'), values: { name: 'Blake', active: false }, where: eq('id', 7) };
+
+  test('inserts one row with sorted columns and bound values', () => {
+    expect(compile(insert)).toEqual({ sql: 'INSERT INTO `users` (`active`, `name`) VALUES (?, ?)', parameters: [true, 'Avery'] });
+  });
+
+  test('inserts multiple rows with consistent column order and numbered placeholders', () => {
+    const spec = { ...insert, into: id('app', 'us`ers'), rows: [{ name: "' OR 1=1; --", active: true }, { active: false, name: '' }] };
+    const before = JSON.stringify(spec);
+    expect(compileQuery(spec, { ...mysqlDialect, placeholder: (position) => `$${position}` })).toEqual({
+      sql: 'INSERT INTO `app`.`us``ers` (`active`, `name`) VALUES ($1, $2), ($3, $4)',
+      parameters: [true, "' OR 1=1; --", false, ''],
+    });
+    expect(JSON.stringify(spec)).toBe(before);
+  });
+
+  test('updates sorted assignments before nested predicate parameters', () => {
+    const spec = { ...update, where: allOf(eq('id', 7), inArray(['admin', 'moderator'])) };
+    const before = JSON.stringify(spec);
+    expect(compileQuery(spec, { ...mysqlDialect, placeholder: (position) => `$${position}` })).toEqual({
+      sql: 'UPDATE `users` SET `active` = $1, `name` = $2 WHERE (`id` = $3 AND `role` IN ($4, $5))',
+      parameters: [false, 'Blake', 7, 'admin', 'moderator'],
+    });
+    expect(JSON.stringify(spec)).toBe(before);
+  });
+
+  test('quotes mutation column names, including reserved names and backticks', () => {
+    expect(compile({ ...update, table: id('app', 'us`ers'), values: { 'na`me': 'Avery', order: 0 } })).toEqual({
+      sql: 'UPDATE `app`.`us``ers` SET `na``me` = ?, `order` = ? WHERE `id` = ?', parameters: ['Avery', 0, 7],
+    });
+  });
+
+  test('supports allowAll explicitly and still honors predicates when present', () => {
+    expect(compile({ kind: 'update', table: id('users'), values: { active: false }, allowAll: true })).toEqual({
+      sql: 'UPDATE `users` SET `active` = ?', parameters: [false],
+    });
+    expect(compile({ ...update, allowAll: true })).toEqual(compile(update));
+    expect(compile({ ...update, allowAll: false })).toEqual(compile(update));
+  });
+
+  test('empty collections cannot cause an unbounded update', () => {
+    expect(compile({ ...update, where: inArray([]) })).toEqual({
+      sql: 'UPDATE `users` SET `active` = ?, `name` = ? WHERE 1 = 0', parameters: [false, 'Blake'],
+    });
+  });
+
+  test.each([undefined, null, false, true, 1, {}, [], [{}], [{ id: 1 }, {}], [{ id: 1 }, { name: 'Avery' }], [{ id: 1 }, , { id: 2 }]].map((value) => [value]))(
+    'rejects malformed or inconsistent insert rows %p', (rows) => {
+      expect(() => compile({ ...insert, rows })).toThrow('queryBuilder:');
+    },
+  );
+
+  test.each([null, undefined, {}, [], new Date(), Object.create({ id: 1 })].map((value) => [value]))('rejects invalid update values %p', (values) => {
+    expect(() => compile({ ...update, values })).toThrow('queryBuilder:');
+  });
+
+  test.each(['', ' ', 'users.id', '*', 'na?me', 'na\0me'])('rejects invalid mutation column %p', (column) => {
+    expect(() => compile({ ...insert, rows: [{ [column]: 1 }] })).toThrow('identifier');
+    expect(() => compile({ ...update, values: { [column]: 1 } })).toThrow('identifier');
+  });
+
+  test.each([null, undefined, NaN, Infinity, {}, [], new Date(), () => 1, { toSqlString: () => 'NOW()' }].map((value) => [value]))(
+    'rejects non-scalar mutation value %p', (value) => {
+      expect(() => compile({ ...insert, rows: [{ name: value }] })).toThrow('values must be');
+      expect(() => compile({ ...update, values: { name: value } })).toThrow('values must be');
+    },
+  );
+
+  test('rejects unsafe updates and unsupported clauses', () => {
+    for (const allowAll of [undefined, false, 1, 'true', null]) {
+      expect(() => compile({ kind: 'update', table: id('users'), values: { active: false }, allowAll })).toThrow('queryBuilder:');
+    }
+    expect(() => compile({ kind: 'update', table: id('users'), values: { active: false } })).toThrow('requires a predicate');
+    for (const field of ['where', 'limit', 'columns', 'allowAll']) {
+      expect(() => compile({ ...insert, [field]: true })).toThrow('unsupported insert field');
+    }
+    for (const field of ['limit', 'columns', 'orderBy']) {
+      expect(() => compile({ ...update, [field]: true })).toThrow('unsupported update field');
+    }
+    expect(() => compile({ ...update, where: undefined, allowAll: true })).toThrow('predicate');
+  });
+
+  test('rejects accessors, symbols and non-enumerable values rather than silently omitting them', () => {
+    const getter = { get name() { throw new Error('must not run'); } };
+    const hidden = Object.defineProperty({ id: 1 }, 'name', { value: 'Avery' });
+    for (const values of [getter, hidden, { id: 1, [Symbol('name')]: 'Avery' }]) {
+      expect(() => compile({ ...insert, rows: [values] })).toThrow('queryBuilder:');
+      expect(() => compile({ ...update, values })).toThrow('queryBuilder:');
+    }
   });
 });

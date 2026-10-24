@@ -46,7 +46,7 @@ server_scripts {
 }
 ```
 
-`Builder` provides the SELECT query builder and its predicate operators. `MySQL` provides the existing raw SQL functions. The imports work independently and can be loaded in either order.
+`Builder` provides SELECT, INSERT, and UPDATE queries and predicate operators. `MySQL` provides the existing raw SQL functions. The imports work independently and can be loaded in either order.
 
 ```lua
 local users = Builder.table('users')
@@ -55,8 +55,16 @@ local users = Builder.table('users')
     :limit(10)
     :get()
 
+local insertId = Builder.table('users'):insert({ name = 'Avery', active = true })
+
+local affectedRows = Builder.table('users')
+    :where(Builder.op.eq('id', insertId))
+    :update({ active = false })
+
 local count = MySQL.scalar.await('SELECT COUNT(*) FROM users')
 ```
+
+`insert(rowOrRows, callback?)` accepts a non-empty row map or a dense array of rows with identical column names. `update(values, callback?)` requires a `where` predicate; use `:allowAll():update(values)` to deliberately update every row. Without callbacks, both terminals await internally. Mutation values use the same scalar rules as predicates. Column map keys must be unqualified names. `select()` and `limit()` are unsupported on mutations; `where()` and `allowAll()` are unsupported on inserts.
 
 Existing builder calls must change from `MySQL.table` / `MySQL.op` to `Builder.table` / `Builder.op` and load `@oxmysql/lib/Builder.lua`.
 

@@ -16,8 +16,22 @@ export interface SelectSpec {
   readonly limit?: number;
 }
 
-export type QuerySpec = SelectSpec;
-export type BuilderResultMode = 'query' | 'single';
+export interface InsertSpec {
+  readonly kind: 'insert';
+  readonly into: Identifier;
+  readonly rows: readonly Readonly<Record<string, unknown>>[];
+}
+
+export interface UpdateSpec {
+  readonly kind: 'update';
+  readonly table: Identifier;
+  readonly values: Readonly<Record<string, unknown>>;
+  readonly where?: Predicate;
+  readonly allowAll?: boolean;
+}
+
+export type QuerySpec = SelectSpec | InsertSpec | UpdateSpec;
+export type BuilderResultMode = 'query' | 'single' | 'insert' | 'update';
 
 export interface CompiledQuery {
   sql: string;
