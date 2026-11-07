@@ -48,6 +48,10 @@ server_scripts {
 
 `Builder` provides SELECT, INSERT, and UPDATE queries and predicate operators. `MySQL` provides the existing raw SQL functions. The imports work independently and can be loaded in either order.
 
+This branch uses Kysely 0.29.8 for compile-only MySQL query generation. The Lua API
+and oxmysql's existing connection pool and result handling remain the same as the
+Knex branch. Kysely's dummy driver never opens a database connection.
+
 ```lua
 local users = Builder.table('users')
     :select({ 'id', 'name' })

@@ -1,6 +1,19 @@
 # Query Builder Proof-of-Concept Plan
 
-Status: Implemented; live FiveM/MySQL validation pending environment configuration
+Status: SELECT, INSERT, and UPDATE implemented; Kysely compiler comparison branch
+
+## Current compiler
+
+`kysely-query-builder` replaces Knex with Kysely 0.29.8 without changing the Lua
+facade or execution path. One compile-only Kysely instance uses `DummyDriver` and
+the MySQL compiler. Per-query identifier tokens preserve literal names, and no
+Kysely database connection is opened. Kysely produces SQL and bound parameters;
+oxmysql retains connection pooling, execution, logging, and result parsing.
+
+The original proposal and examples below are historical. Current calls use
+`Builder.table` / `Builder.op` from `@oxmysql/lib/Builder.lua`, including `insert`,
+`update`, and explicit `allowAll` for updates without predicates. Compare this
+branch using the existing Lua `oxmysql_benchmark 500 4` resource, unchanged.
 
 This plan narrows [the query builder specification](./query-builder-spec.md) to the smallest working Lua-first vertical slice. The branch should prove the complete path from a fluent Lua call to parameterized MySQL execution while establishing code boundaries that PostgreSQL and additional operations can extend later.
 

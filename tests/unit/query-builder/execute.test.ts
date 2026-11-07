@@ -37,7 +37,7 @@ describe('query builder execution', () => {
     const rows = [{ id: 1 }, { id: 2 }];
     conn.queue.push(rows);
     expect(await executeBuilderQuery(spec, 'query', 'builder-resource')).toEqual(rows);
-    expect(conn.calls[0]).toEqual({ op: 'query', arg: { sql: 'SELECT * FROM `users` WHERE `active` = ? LIMIT ?', values: [true, 10] } });
+    expect(conn.calls[0]).toEqual({ op: 'query', arg: { sql: 'select * from `users` where `active` = ? limit ?', values: [true, 10] } });
     expect(conn.ops()).toEqual(['query', 'release']);
   });
 
@@ -94,7 +94,7 @@ describe('query builder execution', () => {
     expect(received[0][1]).toContain('builder-resource was unable to execute a query!');
     expect(received[0][1]).toContain('query failed');
     expect(events).toHaveBeenCalledWith('oxmysql:error', expect.objectContaining({
-      resource: 'builder-resource', query: 'SELECT * FROM `users` WHERE `active` = ? LIMIT ?', parameters: [true, 10],
+      resource: 'builder-resource', query: 'select * from `users` where `active` = ? limit ?', parameters: [true, 10],
     }));
     expect(conn.ops()).toEqual(['query', 'release']);
   });
@@ -121,8 +121,8 @@ describe('mutation execution', () => {
   const update: QuerySpec = { kind: 'update', table: spec.from, values: { active: false }, where: spec.where };
 
   test.each([
-    { spec: insert, mode: 'insert' as const, result: 42, sql: 'INSERT INTO `users` (`active`, `name`) VALUES (?, ?)', values: [true, 'Avery'] },
-    { spec: update, mode: 'update' as const, result: 3, sql: 'UPDATE `users` SET `active` = ? WHERE `active` = ?', values: [false, true] },
+    { spec: insert, mode: 'insert' as const, result: 42, sql: 'insert into `users` (`active`, `name`) values (?, ?)', values: [true, 'Avery'] },
+    { spec: update, mode: 'update' as const, result: 3, sql: 'update `users` set `active` = ? where `active` = ?', values: [false, true] },
   ])('$mode returns the existing mutation result for direct and callback calls', async ({ spec, mode, result, sql, values }) => {
     for (const useCallback of [false, true]) {
       conn.queue.push({ insertId: 42, affectedRows: 3 });

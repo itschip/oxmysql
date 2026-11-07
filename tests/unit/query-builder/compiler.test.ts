@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { compileQuery } from '../../../src/query-builder/compiler';
-import { mysqlDialect } from '../../../src/query-builder/dialects/mysql';
 import type { Identifier, Predicate, SelectSpec } from '../../../src/query-builder/types';
 
 const id = (...parts: string[]): Identifier => ({ kind: 'identifier', parts });
@@ -8,48 +7,60 @@ const eq = (column: string, value: unknown): Predicate => ({ kind: 'comparison',
 const inArray = (values: unknown[]): Predicate => ({ kind: 'collection', operator: 'inArray', column: id('role'), values });
 const allOf = (...predicates: Predicate[]): Predicate => ({ kind: 'group', operator: 'allOf', predicates });
 const base: SelectSpec = { kind: 'select', from: id('users'), columns: '*' };
-const compile = (spec: unknown) => compileQuery(spec, mysqlDialect);
+const compile = compileQuery;
 
 describe('query builder compiler', () => {
   test('selects all columns by default specification', () => {
-    expect(compile(base)).toEqual({ sql: 'SELECT * FROM `users`', parameters: [] });
+    expect(compile(base)).toEqual({ sql: 'select * from `users`', parameters: [] });
   });
 
   test('quotes explicit qualified columns and escapes backticks', () => {
     expect(compile({ ...base, from: id('app', 'us`ers'), columns: [id('users', 'id'), id('na`me')] })).toEqual({
-      sql: 'SELECT `users`.`id`, `na``me` FROM `app`.`us``ers`', parameters: [],
+      sql: 'select `users`.`id`, `na``me` from `app`.`us``ers`', parameters: [],
     });
+  });
+
+  test('preserves literal identifier parts and mutation binding order', () => {
+    expect(compile({ ...base, from: id(' users as u '), columns: [id(' name as n ')], where: allOf(eq(' name as n ', 'Avery')) })).toEqual({
+      sql: 'select ` name as n ` from ` users as u ` where ` name as n ` = ?', parameters: ['Avery'],
+    });
+    const values = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [` name as n ${String(i).padStart(2, '0')} `, i]));
+    const spec = { kind: 'update', table: id('users'), values, allowAll: true };
+    const expected = { sql: `update \`users\` set ${Object.keys(values).map((name) => `\`${name}\` = ?`).join(', ')}`, parameters: Object.values(values) };
+    expect(compile(spec)).toEqual(expected);
+    expect(compile({ kind: 'insert', into: id('users'), rows: [values, values] }).parameters).toEqual([...expected.parameters, ...expected.parameters]);
+    expect(compile(spec)).toEqual(expected);
   });
 
   test('compiles the complete POC example', () => {
     expect(compile({ ...base, columns: [id('id'), id('name')], where: allOf(eq('active', true), inArray(['admin', 'moderator'])), limit: 10 })).toEqual({
-      sql: 'SELECT `id`, `name` FROM `users` WHERE (`active` = ? AND `role` IN (?, ?)) LIMIT ?',
+      sql: 'select `id`, `name` from `users` where (`active` = ? and `role` in (?, ?)) limit ?',
       parameters: [true, 'admin', 'moderator', 10],
     });
   });
 
   test.each([false, 0, '', "' OR 1 = 1; --", 'a?@b:c'])('parameterizes eq value %p', (value) => {
     expect(compile({ ...base, where: eq('name', value) })).toEqual({
-      sql: 'SELECT * FROM `users` WHERE `name` = ?', parameters: [value],
+      sql: 'select * from `users` where `name` = ?', parameters: [value],
     });
   });
 
   test('empty inArray is false without parameters', () => {
-    expect(compile({ ...base, where: inArray([]) })).toEqual({ sql: 'SELECT * FROM `users` WHERE 1 = 0', parameters: [] });
+    expect(compile({ ...base, where: inArray([]) })).toEqual({ sql: 'select * from `users` where 1 = 0', parameters: [] });
   });
 
-  test('preserves nested group order and placeholder positions', () => {
+  test('preserves nested group and binding order without mutating the spec', () => {
     const spec = { ...base, where: allOf(eq('id', 1), allOf(inArray(['admin', 'moderator']), eq('active', false))), limit: 0 };
     const before = JSON.stringify(spec);
-    expect(compileQuery(spec, { ...mysqlDialect, placeholder: (position) => `$${position}` })).toEqual({
-      sql: 'SELECT * FROM `users` WHERE (`id` = $1 AND (`role` IN ($2, $3) AND `active` = $4)) LIMIT $5',
+    expect(compile(spec)).toEqual({
+      sql: 'select * from `users` where (`id` = ? and (`role` in (?, ?) and `active` = ?)) limit ?',
       parameters: [1, 'admin', 'moderator', false, 0],
     });
     expect(JSON.stringify(spec)).toBe(before);
   });
 
   test.each([0, 1, Number.MAX_SAFE_INTEGER])('parameterizes limit %p', (limit) => {
-    expect(compile({ ...base, limit })).toEqual({ sql: 'SELECT * FROM `users` LIMIT ?', parameters: [limit] });
+    expect(compile({ ...base, limit })).toEqual({ sql: 'select * from `users` limit ?', parameters: [limit] });
   });
 
   test.each([null, undefined, '', {}, [], { ...base, kind: 'delete' }, { ...base, orderBy: [] }].map((value) => [value]))('rejects invalid statements %p', (spec) => {
@@ -104,14 +115,14 @@ describe('mutation compiler', () => {
   const update = { kind: 'update', table: id('users'), values: { name: 'Blake', active: false }, where: eq('id', 7) };
 
   test('inserts one row with sorted columns and bound values', () => {
-    expect(compile(insert)).toEqual({ sql: 'INSERT INTO `users` (`active`, `name`) VALUES (?, ?)', parameters: [true, 'Avery'] });
+    expect(compile(insert)).toEqual({ sql: 'insert into `users` (`active`, `name`) values (?, ?)', parameters: [true, 'Avery'] });
   });
 
-  test('inserts multiple rows with consistent column order and numbered placeholders', () => {
+  test('inserts multiple rows with consistent column and binding order', () => {
     const spec = { ...insert, into: id('app', 'us`ers'), rows: [{ name: "' OR 1=1; --", active: true }, { active: false, name: '' }] };
     const before = JSON.stringify(spec);
-    expect(compileQuery(spec, { ...mysqlDialect, placeholder: (position) => `$${position}` })).toEqual({
-      sql: 'INSERT INTO `app`.`us``ers` (`active`, `name`) VALUES ($1, $2), ($3, $4)',
+    expect(compile(spec)).toEqual({
+      sql: 'insert into `app`.`us``ers` (`active`, `name`) values (?, ?), (?, ?)',
       parameters: [true, "' OR 1=1; --", false, ''],
     });
     expect(JSON.stringify(spec)).toBe(before);
@@ -120,8 +131,8 @@ describe('mutation compiler', () => {
   test('updates sorted assignments before nested predicate parameters', () => {
     const spec = { ...update, where: allOf(eq('id', 7), inArray(['admin', 'moderator'])) };
     const before = JSON.stringify(spec);
-    expect(compileQuery(spec, { ...mysqlDialect, placeholder: (position) => `$${position}` })).toEqual({
-      sql: 'UPDATE `users` SET `active` = $1, `name` = $2 WHERE (`id` = $3 AND `role` IN ($4, $5))',
+    expect(compile(spec)).toEqual({
+      sql: 'update `users` set `active` = ?, `name` = ? where (`id` = ? and `role` in (?, ?))',
       parameters: [false, 'Blake', 7, 'admin', 'moderator'],
     });
     expect(JSON.stringify(spec)).toBe(before);
@@ -129,13 +140,13 @@ describe('mutation compiler', () => {
 
   test('quotes mutation column names, including reserved names and backticks', () => {
     expect(compile({ ...update, table: id('app', 'us`ers'), values: { 'na`me': 'Avery', order: 0 } })).toEqual({
-      sql: 'UPDATE `app`.`us``ers` SET `na``me` = ?, `order` = ? WHERE `id` = ?', parameters: ['Avery', 0, 7],
+      sql: 'update `app`.`us``ers` set `na``me` = ?, `order` = ? where `id` = ?', parameters: ['Avery', 0, 7],
     });
   });
 
   test('supports allowAll explicitly and still honors predicates when present', () => {
     expect(compile({ kind: 'update', table: id('users'), values: { active: false }, allowAll: true })).toEqual({
-      sql: 'UPDATE `users` SET `active` = ?', parameters: [false],
+      sql: 'update `users` set `active` = ?', parameters: [false],
     });
     expect(compile({ ...update, allowAll: true })).toEqual(compile(update));
     expect(compile({ ...update, allowAll: false })).toEqual(compile(update));
@@ -143,7 +154,7 @@ describe('mutation compiler', () => {
 
   test('empty collections cannot cause an unbounded update', () => {
     expect(compile({ ...update, where: inArray([]) })).toEqual({
-      sql: 'UPDATE `users` SET `active` = ?, `name` = ? WHERE 1 = 0', parameters: [false, 'Blake'],
+      sql: 'update `users` set `active` = ?, `name` = ? where 1 = 0', parameters: [false, 'Blake'],
     });
   });
 

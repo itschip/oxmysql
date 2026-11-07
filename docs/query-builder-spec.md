@@ -1,18 +1,22 @@
 # Query Builder Specification
 
-Status: SELECT proof of concept implemented; broader v1 features proposed
+Status: SELECT, INSERT, and UPDATE implemented with Kysely; broader v1 features proposed
 
 Implementation roadmap: [Query Builder Proof-of-Concept Plan](./query-builder-poc-plan.md)
 
 ## Summary
 
-Add an optional query builder to oxmysql without changing the behavior or signatures of the existing raw SQL APIs. The first implementation targets MySQL, but its compiler is organized around a SQL dialect contract so PostgreSQL syntax can be added later.
+Add an optional query builder to oxmysql without changing the behavior or signatures of the existing raw SQL APIs. This branch replaces the Knex compiler with Kysely 0.29.8 for MySQL compilation, preserving the serializable specification and Lua API.
 
 The builder produces a serializable query specification. oxmysql compiles that specification into SQL and positional parameters, then sends the compiled result through the existing execution functions. SQL generation and database-driver behavior are separate concerns.
 
 ## Implemented proof of concept
 
-The [POC plan](./query-builder-poc-plan.md) defines the currently implemented subset. Only `MySQL.table`, `select`, `where`, `limit`, `get`, `first`, and `MySQL.op.eq`, `inArray`, and `allOf` are available. The broader API and schema below remain a roadmap, not a claim of v1 completeness.
+The supported API is `Builder.table`, `select`, `where`, `limit`, `get`, `first`, `insert`, `update`, `allowAll`, and `Builder.op.eq`, `inArray`, and `allOf`. Import `@oxmysql/lib/Builder.lua`; the raw `MySQL` import is independent. The broader API and historical dialect proposal below remain a roadmap, not a claim of v1 completeness.
+
+- One shared Kysely instance uses `DummyDriver`, `MysqlAdapter`, and `MysqlQueryCompiler`; no Kysely connection pool is created. Each compile creates a fresh query builder and identifier context, then passes SQL and positional bindings through the existing oxmysql execution path.
+- A small compiler subclass maps per-query tokens to literal identifier parts before delegating quoting to Kysely. Names containing whitespace, backticks, or ` as ` remain literal names. The context is cleared in `finally` after synchronous compilation. Kysely owns statement construction, predicate grouping, placeholders, and SQL generation.
+- Insert rows require identical, sorted column names. Updates require a predicate or explicit `allowAll`. Mutations return the existing insert ID / affected-row results.
 
 - The POC `SelectSpec.columns` is `Identifier[] | '*'`; omission of Lua `select` produces `'*'`. Explicit `select` requires a non-empty list of identifiers.
 - Bound values are non-null strings, booleans, or finite numbers. Tables/objects and arrays are not scalar values: mysql2's text-query formatter expands them into SQL structures. JSON, binary, and null bindings need explicit future contracts.
@@ -21,7 +25,7 @@ The [POC plan](./query-builder-poc-plan.md) defines the currently implemented su
 - Only documented spec fields, kinds, and operators are accepted. Predicate nesting is limited to 64 levels; unsupported statements and clauses are rejected rather than silently ignored.
 - Builder state is private and immutable. Operators and terminal operations copy caller-owned tables; only fresh plain specifications cross the dedicated `queryBuilder` export.
 - Validation failures use existing `logError` semantics. Awaited calls reject; normal callbacks retain the existing log-only error behavior unless `mysql_option 'return_callback_errors'` is set.
-- No raw exports, compatibility aliases, or public TypeScript facade methods are changed. PostgreSQL and mutation support remain deferred.
+- No raw exports, compatibility aliases, or public TypeScript facade methods are changed. PostgreSQL connectivity remains deferred; supporting it also requires driver, placeholder, and result-handling changes, not just a compiler swap.
 
 ## Goals
 

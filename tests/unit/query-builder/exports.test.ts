@@ -47,7 +47,7 @@ test('registers only the dedicated builder export while retaining raw exports an
       );
     });
     expect(rows).toEqual([{ id: 1 }]);
-    expect(conn.calls[0].arg).toEqual({ sql: 'SELECT * FROM `users`', values: [] });
+    expect(conn.calls[0].arg).toEqual({ sql: 'select * from `users`', values: [] });
 
     conn.queue.push([{ raw: 7 }]);
     expect(await registered.get('query_async')!('SELECT ? AS raw', [7], 'raw-resource')).toEqual([{ raw: 7 }]);
