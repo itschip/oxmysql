@@ -176,6 +176,58 @@ test('obvious misuse fails locally without calling an export', function()
 	assert(#calls == before, 'invalid API use must not call an export')
 end)
 
+test('serializes aliases and ordered columns without mutating earlier builders', function()
+	local timestamp = Builder.fn.unixTimestamp('players.last_logged_out')
+	local selection = Builder.as(timestamp, 'lastLoggedOutUnix')
+	local base = Builder.table('players'):select({ 'citizenid', selection, Builder.as('players.cid', 'slot') })
+	local bySlot = base:orderBy('players.cid')
+	local sorted = bySlot:orderBy('citizenid', 'desc')
+	timestamp.column.parts[2] = 'changed'
+	selection.expression.column.parts[2] = 'changed'
+
+	sorted:first()
+	local call = calls[#calls]
+	assert(call.parameters == 'single')
+	same(call.query, {
+		kind = 'select', from = id('players'), limit = 1,
+		columns = {
+			id('citizenid'),
+			{
+				kind = 'alias', alias = 'lastLoggedOutUnix',
+				expression = { kind = 'function', name = 'unixTimestamp', column = id('players', 'last_logged_out') },
+			},
+			{ kind = 'alias', alias = 'slot', expression = id('players', 'cid') },
+		},
+		orderBy = {
+			{ column = id('players', 'cid'), direction = 'asc' },
+			{ column = id('citizenid'), direction = 'desc' },
+		},
+	})
+	call.query.columns[2].expression.column.parts[2] = 'changed'
+	call.query.orderBy[1].column.parts[2] = 'changed'
+
+	bySlot:get()
+	assert(calls[#calls].query.columns[2].expression.column.parts[2] == 'last_logged_out')
+	same(calls[#calls].query.orderBy, { { column = id('players', 'cid'), direction = 'asc' } })
+	base:get()
+	assert(calls[#calls].query.orderBy == nil)
+end)
+
+test('rejects invalid selections, ordering and ordered mutations before execution', function()
+	local base = Builder.table('players')
+	local before = #calls
+	rejects(function() Builder.as('citizenid', 'player.id') end)
+	rejects(function() Builder.fn.unixTimestamp('players.*') end)
+	rejects(function() Builder.as({ kind = 'raw', sql = 'unix_timestamp(last_logged_out)' }, 'lastSeen') end)
+	rejects(function() base:select({ Builder.fn.unixTimestamp('last_logged_out') }) end)
+	rejects(function() base:orderBy('cid', 'desc, 1') end)
+	rejects(function() base:orderBy('cid', false) end)
+	rejects(function() base:orderBy('*') end)
+	rejects(function() base:orderBy('cid'):insert({ cid = 1 }) end)
+	rejects(function() base:orderBy('cid'):where(op.eq('cid', 1)):update({ cid = 2 }) end)
+	assert(#calls == before)
+end)
+
 test('raw APIs, stored references and aliases still bypass the builder', function()
 	assert(MySQL.query.await('SELECT ?', { 1 }) == response)
 	assert(calls[#calls].method == 'query' and calls[#calls].query == 'SELECT ?')

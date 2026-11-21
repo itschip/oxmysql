@@ -12,13 +12,14 @@ The builder produces a serializable query specification. oxmysql compiles that s
 
 ## Implemented proof of concept
 
-The supported API is `Builder.table`, `select`, `where`, `limit`, `get`, `first`, `insert`, `update`, `allowAll`, and `Builder.op.eq`, `inArray`, and `allOf`. Import `@oxmysql/lib/Builder.lua`; the raw `MySQL` import is independent. The broader API and historical dialect proposal below remain a roadmap, not a claim of v1 completeness.
+The supported API is `Builder.table`, `select`, `where`, `orderBy`, `limit`, `get`, `first`, `insert`, `update`, `allowAll`, `Builder.as`, `Builder.fn.unixTimestamp`, and `Builder.op.eq`, `inArray`, and `allOf`. Import `@oxmysql/lib/Builder.lua`. The raw `MySQL` import is independent. The broader API and historical dialect proposal below describe planned features.
 
 - One shared Kysely instance uses `DummyDriver`, `MysqlAdapter`, and `MysqlQueryCompiler`; no Kysely connection pool is created. Each compile creates a fresh query builder and identifier context, then passes SQL and positional bindings through the existing oxmysql execution path.
 - A small compiler subclass maps per-query tokens to literal identifier parts before delegating quoting to Kysely. Names containing whitespace, backticks, or ` as ` remain literal names. The context is cleared in `finally` after synchronous compilation. Kysely owns statement construction, predicate grouping, placeholders, and SQL generation.
 - Insert rows require identical, sorted column names. Updates require a predicate or explicit `allowAll`. Mutations return the existing insert ID / affected-row results.
 
-- The POC `SelectSpec.columns` is `Identifier[] | '*'`; omission of Lua `select` produces `'*'`. Explicit `select` requires a non-empty list of identifiers.
+- `SelectSpec.columns` is `Selection[] | '*'`. Omitting Lua `select` produces `'*'`. Explicit `select` requires a non-empty list of identifiers or aliased selections. An aliased selection contains a column reference or a supported function expression and a single identifier segment for its alias. The supported function is `UNIX_TIMESTAMP(column)`.
+- `orderBy` accepts a column or selection alias and an optional `asc` or `desc` direction. Lua defaults to `asc`. Repeated calls append sort keys in order. Sort keys are applied before `limit` and are supported only on SELECT.
 - Bound values are non-null strings, booleans, or finite numbers. Tables/objects and arrays are not scalar values: mysql2's text-query formatter expands them into SQL structures. JSON, binary, and null bindings need explicit future contracts.
 - Identifiers are non-empty dot-separated segments. Segments reject wildcards, control characters, and `?`, which the existing text-query path would interpret as a placeholder even within quoted identifiers. Backticks are supported and doubled by the MySQL dialect. The default whole selection `'*'` is the only wildcard in the POC.
 - Limits are parameterized non-negative safe integers. `first` caps the limit at one while preserving zero.

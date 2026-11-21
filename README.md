@@ -48,9 +48,9 @@ server_scripts {
 
 `Builder` provides SELECT, INSERT, and UPDATE queries and predicate operators. `MySQL` provides the existing raw SQL functions. The imports work independently and can be loaded in either order.
 
-This branch uses Kysely 0.29.8 for compile-only MySQL query generation. The Lua API
-and oxmysql's existing connection pool and result handling remain the same as the
-Knex branch. Kysely's dummy driver never opens a database connection.
+This branch uses Kysely 0.29.8 to compile MySQL queries. oxmysql supplies the
+connection pool and handles results. Kysely's dummy driver never opens a
+database connection.
 
 ```lua
 local users = Builder.table('users')
@@ -67,6 +67,21 @@ local affectedRows = Builder.table('users')
 
 local count = MySQL.scalar.await('SELECT COUNT(*) FROM users')
 ```
+
+`orderBy(column, direction?)` defaults to `asc` and accepts `desc`. Call it again
+to add a tie-breaker. Use `Builder.as(columnOrExpression, alias)` in the select
+list to name a column or a supported expression. For example:
+
+```lua
+local characters = Builder.table('players')
+    :select({ 'citizenid', Builder.as(Builder.fn.unixTimestamp('last_logged_out'), 'lastLoggedOutUnix') })
+    :where(Builder.op.inArray('license', licenses))
+    :orderBy('cid')
+    :get()
+```
+
+`licenses` is a dense list of license identifiers. `Builder.fn.unixTimestamp`
+uses MySQL's `UNIX_TIMESTAMP` function and preserves its null result.
 
 `insert(rowOrRows, callback?)` accepts a non-empty row map or a dense array of rows with identical column names. `update(values, callback?)` requires a `where` predicate; use `:allowAll():update(values)` to deliberately update every row. Without callbacks, both terminals await internally. Mutation values use the same scalar rules as predicates. Column map keys must be unqualified names. `select()` and `limit()` are unsupported on mutations; `where()` and `allowAll()` are unsupported on inserts.
 

@@ -26,8 +26,10 @@ The two imports are independent and can appear in either order. Builder-only res
 ## Supported API
 
 - `Builder.table(name)` starts a SELECT with all columns selected by default.
-- `:select({ 'id', 'name' })` selects a non-empty dense array of column identifiers. Omit this call to select all columns; `:select('*')` is unsupported.
+- `:select({ 'id', 'name' })` selects a non-empty dense array of identifiers or aliased selections. Omit this call to select all columns.
+- `Builder.as(columnOrExpression, alias)` aliases a column or a supported SQL expression in the select list. `Builder.fn.unixTimestamp('last_logged_out')` constructs a `UNIX_TIMESTAMP` expression.
 - `:where(predicate)` adds a predicate. Repeated calls combine with AND.
+- `:orderBy(column, direction?)` sorts by a column or alias. The direction is `asc` by default or `desc` when specified. Repeated calls append sort keys.
 - `:limit(number)` sets a non-negative safe integer limit, including zero.
 - `:get(callback?)` returns a list of rows.
 - `:first(callback?)` returns one row or `nil`. It caps the limit at one and preserves an explicit zero limit.
@@ -84,11 +86,11 @@ Values must be non-null strings, booleans, or finite numbers. `false` and zero a
 
 Table and column names are validated dot-separated identifiers, such as `users.id`; the compiler quotes each segment. Empty segments, wildcards, control characters, and `?` are rejected. Choose identifiers from application code or an allowlist. Supply user input as predicate values; never interpolate it into SQL or identifier names.
 
-INSERT and UPDATE map keys must be unqualified column names, such as `name`; dotted keys are rejected. Mutation values follow the scalar rules above. Mutations reject `select()` and `limit()`; INSERT also rejects `where()` and `allowAll()`. Do not reuse a SELECT chain containing these clauses for a mutation.
+INSERT and UPDATE map keys must be unqualified column names, such as `name`. Mutation values follow the scalar rules above. Both mutations reject `select()`, `orderBy()`, and `limit()`. INSERT also rejects `where()` and `allowAll()`.
 
 ## Unsupported queries
 
-The current builder has no delete, ordering, offset, joins, aggregates, aliases, distinct, raw expressions, null checks, OR/NOT groups, or comparison operators beyond `eq` and `inArray`. There is no public JavaScript/TypeScript builder or PostgreSQL support.
+The current builder has no delete, offset, joins, aggregates, distinct, raw expressions, null checks, OR/NOT groups, or comparison operators beyond `eq` and `inArray`. There is no public JavaScript/TypeScript builder or PostgreSQL support.
 
 For those operations, use the existing parameterized `MySQL` functions unless the user explicitly asks to extend the builder. For example:
 
@@ -103,6 +105,6 @@ local removed = MySQL.update.await(
 
 Treat `lib/Builder.lua` and `src/query-builder/` as the implementation authority. The [POC plan](../../docs/query-builder-poc-plan.md) describes the implemented subset; the [full specification](../../docs/query-builder-spec.md) also describes future features.
 
-When extending the implementation, keep Lua builders and operators local to the consuming resource. Only plain query specifications cross the dedicated `queryBuilder` export. The TypeScript adapter validates specifications and uses a shared compile-only Knex MySQL client to produce SQL and bindings; execution uses the existing raw-query path. Keep Knex types out of the Lua/specification contract, and let Knex handle SQL rendering. Preserve existing `MySQL` signatures, compatibility aliases, parameter binding, invoking-resource attribution, and callback/promise error behavior.
+When extending the implementation, keep Lua builders and operators local to the consuming resource. Only plain query specifications cross the dedicated `queryBuilder` export. The TypeScript adapter validates specifications and uses a shared compile-only Kysely MySQL client to produce SQL and bindings. Execution uses the existing raw-query path. Keep Kysely types out of the Lua specification. Preserve existing `MySQL` signatures, compatibility aliases, parameter binding, invoking-resource attribution, and callback/promise error behavior.
 
 Relevant checks are `tests/lua/query-builder.test.lua` for the Lua facade and `tests/unit/query-builder/` for compilation and execution. The POC plan documents the available validation tasks. Distinguish mocked contract checks from live FiveM/MySQL validation when reporting results.

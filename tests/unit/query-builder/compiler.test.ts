@@ -39,6 +39,66 @@ describe('query builder compiler', () => {
     });
   });
 
+  test('compiles the character selection with an aliased SQL function and orders by slot', () => {
+    const spec: SelectSpec = {
+      kind: 'select',
+      from: id('players'),
+      columns: [
+        ...['citizenid', 'charinfo', 'money', 'job', 'gang', 'position', 'metadata'].map((column) => id(column)),
+        { kind: 'alias', alias: 'lastLoggedOutUnix', expression: {
+          kind: 'function', name: 'unixTimestamp', column: id('last_logged_out'),
+        } },
+      ],
+      where: { kind: 'collection', operator: 'inArray', column: id('license'), values: ['primary', 'secondary'] },
+      orderBy: [{ column: id('cid'), direction: 'asc' }],
+    };
+    expect(compile(spec)).toEqual({
+      sql: 'select `citizenid`, `charinfo`, `money`, `job`, `gang`, `position`, `metadata`, unix_timestamp(`last_logged_out`) as `lastLoggedOutUnix` from `players` where `license` in (?, ?) order by `cid` asc',
+      parameters: ['primary', 'secondary'],
+    });
+  });
+
+  test('quotes aliases and orders by multiple qualified columns or aliases before the limit', () => {
+    const alias = ' last as `seen ';
+    expect(compile({
+      ...base,
+      columns: [{ kind: 'alias', alias, expression: id('users', 'last_seen') }],
+      orderBy: [{ column: id(alias), direction: 'desc' }, { column: id('users', 'id'), direction: 'asc' }],
+      limit: 1,
+    })).toEqual({
+      sql: 'select `users`.`last_seen` as ` last as ``seen ` from `users` order by ` last as ``seen ` desc, `users`.`id` asc limit ?',
+      parameters: [1],
+    });
+  });
+
+  test('rejects malformed alias expressions and arbitrary SQL functions', () => {
+    const column = id('last_seen');
+    const fn = { kind: 'function', name: 'unixTimestamp', column };
+    const expression = { kind: 'alias', alias: 'lastSeen', expression: fn };
+    for (const selection of [
+      { ...expression, alias: 'unsafe.alias' },
+      { ...expression, alias: 'parameter?' },
+      { ...expression, expression: 'unix_timestamp(last_seen)' },
+      { ...expression, expression: { ...fn, name: 'sleep' } },
+      { ...expression, expression: { ...fn, column: id('*') } },
+      { ...expression, expression: { ...fn, sql: '1' } },
+      fn,
+    ]) {
+      expect(() => compile({ ...base, columns: [selection] })).toThrow('queryBuilder:');
+    }
+  });
+
+  test.each([
+    [{ column: id('id'), direction: 'desc, 1' }],
+    [{ column: id('id') }],
+    [{ column: id('id'), direction: 'asc', sql: '1' }],
+    [{ column: id('*'), direction: 'asc' }],
+    [{ column: id('id'), direction: 'asc' }, , { column: id('id'), direction: 'desc' }],
+    'id desc',
+  ].map((orderBy) => [orderBy]))('rejects invalid ORDER BY %p', (orderBy) => {
+    expect(() => compile({ ...base, orderBy })).toThrow('queryBuilder:');
+  });
+
   test.each([false, 0, '', "' OR 1 = 1; --", 'a?@b:c'])('parameterizes eq value %p', (value) => {
     expect(compile({ ...base, where: eq('name', value) })).toEqual({
       sql: 'select * from `users` where `name` = ?', parameters: [value],

@@ -88,6 +88,24 @@ export function compileQuery(input: unknown): CompiledQuery {
 
   const column = (value: unknown): string => name([part(value)]);
 
+  const selection = (input: unknown) => {
+    const value = record(input, ['kind', 'parts', 'expression', 'alias'], 'selection');
+    if (value.kind === 'identifier') return identifier(value);
+
+    record(value, ['kind', 'expression', 'alias'], 'aliased selection');
+    if (value.kind !== 'alias') throw new Error('queryBuilder: unsupported selection kind.');
+
+    const alias = column(value.alias);
+    const expression = record(value.expression, ['kind', 'parts', 'name', 'column'], 'selection expression');
+    if (expression.kind === 'identifier') return eb.ref(identifier(expression)).as(alias);
+
+    record(expression, ['kind', 'name', 'column'], 'selection function');
+    if (expression.kind !== 'function' || expression.name !== 'unixTimestamp')
+      throw new Error('queryBuilder: unsupported selection function.');
+
+    return eb.fn<number | null>('unix_timestamp', [identifier(expression.column)]).as(alias);
+  };
+
   const predicate = (input: unknown, depth = 0): Expression<SqlBool> => {
     if (depth >= 64) throw new Error('queryBuilder: predicate nesting exceeds 64 levels.');
     const value = record(input, ['kind', 'operator', 'column', 'value', 'values', 'predicates'], 'predicate');
@@ -127,11 +145,19 @@ export function compileQuery(input: unknown): CompiledQuery {
   let query: Compilable;
   switch (spec.kind) {
     case 'select': {
-      record(spec, ['kind', 'from', 'columns', 'where', 'limit'], 'select');
-      const columns = spec.columns === '*' ? null : array(spec.columns, 'select columns').map(identifier);
+      record(spec, ['kind', 'from', 'columns', 'where', 'orderBy', 'limit'], 'select');
+      const columns = spec.columns === '*' ? null : array(spec.columns, 'select columns').map(selection);
       const from = client.selectFrom(identifier(spec.from));
       let select = columns === null ? from.selectAll() : from.select(columns);
       if (Object.hasOwn(spec, 'where')) select = select.where(predicate(spec.where));
+      if (Object.hasOwn(spec, 'orderBy')) {
+        for (const input of array(spec.orderBy, 'orderBy')) {
+          const order = record(input, ['column', 'direction'], 'orderBy entry');
+          if (order.direction !== 'asc' && order.direction !== 'desc')
+            throw new Error('queryBuilder: order direction must be asc or desc.');
+          select = select.orderBy(identifier(order.column), order.direction);
+        }
+      }
       if (Object.hasOwn(spec, 'limit')) {
         if (typeof spec.limit !== 'number' || !Number.isSafeInteger(spec.limit) || spec.limit < 0)
           throw new Error('queryBuilder: limit must be a non-negative safe integer.');
