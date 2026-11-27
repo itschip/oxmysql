@@ -1,5 +1,5 @@
 import type { Knex } from 'knex';
-import type { CompiledQuery } from './types';
+import type { ComparisonOperator, CompiledQuery } from './types';
 
 // Bypass Knex's dialect resolver; only MySQL compilation is needed here.
 const MySQLClient: typeof Knex.Client = require('knex/lib/dialects/mysql');
@@ -8,6 +8,24 @@ const client = new MySQLClient({
   // Tokens preserve literal identifier parts, including whitespace and " as ".
   wrapIdentifier: (name, quote, identifiers) => quote(identifiers?.[name] ?? name),
 });
+
+const comparisonOperators = {
+  eq: '=',
+  ne: '!=',
+  gt: '>',
+  gte: '>=',
+  lt: '<',
+  lte: '<=',
+  like: 'like',
+} as const satisfies Record<ComparisonOperator, string>;
+
+// mysql2 also substitutes question marks inside quoted text and comments.
+const rawSqlTokens = new RegExp([
+  /'(?:\\.|[^'\\])*(?:'|$)|"(?:\\.|[^"\\])*(?:"|$)/.source, // strings
+  /`[^`]*(?:`|$)/.source, // quoted identifiers
+  /\/\*.*?(?:\*\/|$)|(?:#|--(?=\s))[^\r\n]*/.source, // comments
+  /\\?\?+/.source, // placeholders
+].join('|'), 'gs');
 
 function record(value: unknown, fields: readonly string[] | null, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -53,6 +71,14 @@ export function compileQuery(input: unknown): CompiledQuery {
     return value;
   };
 
+  const writeValue = (value: unknown): string | boolean | number | null => {
+    if (value && typeof value === 'object') {
+      const marker = record(value, ['kind'], 'write value');
+      if (Object.hasOwn(marker, 'kind') && marker.kind === 'null') return null;
+    }
+    return scalar(value);
+  };
+
   const identifier = (input: unknown): string => {
     const value = record(input, ['kind', 'parts'], 'identifier');
     if (value.kind !== 'identifier') throw new Error('queryBuilder: expected identifier kind.');
@@ -60,16 +86,44 @@ export function compileQuery(input: unknown): CompiledQuery {
     return array(value.parts, 'identifier parts').map(part).join('.');
   };
 
+  const raw = (value: Record<string, unknown>): Knex.Raw => {
+    record(value, ['kind', 'sql', 'bindings'], 'raw expression');
+    if (typeof value.sql !== 'string' || !value.sql.trim())
+      throw new Error('queryBuilder: raw SQL must be a non-empty string.');
+
+    const bindings = Object.hasOwn(value, 'bindings') ? array(value.bindings, 'raw bindings', true) : [];
+    const placeholders = (value.sql.match(rawSqlTokens) ?? []).filter((token) => token.includes('?'));
+    if (placeholders.some((token) => token !== '?' && token !== '??'))
+      throw new Error('queryBuilder: raw placeholders must be unquoted ? or ??. Bind literal question marks as values.');
+    if (placeholders.length !== bindings.length)
+      throw new Error(`queryBuilder: raw SQL expects ${placeholders.length} bindings, received ${bindings.length}.`);
+
+    const parameters = placeholders.map((placeholder, index) => {
+      const binding = bindings[index];
+      if (placeholder === '?') return scalar(binding);
+      if (typeof binding !== 'string') throw new Error('queryBuilder: ?? requires a column identifier string.');
+      return binding.split('.').map(part).join('.');
+    });
+    return client.raw(value.sql, parameters).queryContext(identifiers);
+  };
+
+  const predicateColumn = (input: unknown): Knex.Raw => {
+    const value = record(input, null, 'predicate column');
+    return value.kind === 'raw' ? raw(value).wrap('(', ')') : client.ref(identifier(value));
+  };
+
   const selection = (input: unknown): string | Knex.Raw => {
-    const value = record(input, ['kind', 'parts', 'expression', 'alias'], 'selection');
+    const value = record(input, null, 'selection');
     if (value.kind === 'identifier') return identifier(value);
+    if (value.kind === 'raw') return raw(value);
 
     record(value, ['kind', 'expression', 'alias'], 'aliased selection');
     if (value.kind !== 'alias') throw new Error('queryBuilder: unsupported selection kind.');
 
     const alias = part(value.alias);
-    const expression = record(value.expression, ['kind', 'parts', 'name', 'column'], 'selection expression');
+    const expression = record(value.expression, null, 'selection expression');
     if (expression.kind === 'identifier') return client.raw('?? as ??', [identifier(expression), alias]);
+    if (expression.kind === 'raw') return client.raw('?? as ??', [raw(expression), alias]);
 
     record(expression, ['kind', 'name', 'column'], 'selection function');
     if (expression.kind !== 'function' || expression.name !== 'unixTimestamp')
@@ -78,33 +132,49 @@ export function compileQuery(input: unknown): CompiledQuery {
     return client.raw('unix_timestamp(??) as ??', [identifier(expression.column), alias]);
   };
 
-  const predicate = (query: Knex.QueryBuilder, input: unknown, depth = 0): void => {
+  const predicate = (query: Knex.QueryBuilder, input: unknown, depth = 0, disjunction = false): void => {
     if (depth >= 64) throw new Error('queryBuilder: predicate nesting exceeds 64 levels.');
-    const value = record(input, ['kind', 'operator', 'column', 'value', 'values', 'predicates'], 'predicate');
+    const value = record(input, null, 'predicate');
+    const where = disjunction ? 'orWhere' : 'where';
 
     switch (value.kind) {
+      case 'raw':
+        query[where](raw(value).wrap('(', ')'));
+        break;
       case 'comparison': {
         record(value, ['kind', 'operator', 'column', 'value'], 'comparison');
-        if (value.operator !== 'eq') throw new Error('queryBuilder: unsupported comparison operator.');
-        query.where(identifier(value.column), '=', scalar(value.value));
+        const { operator } = value;
+        if (typeof operator !== 'string' || !Object.hasOwn(comparisonOperators, operator))
+          throw new Error('queryBuilder: unsupported comparison operator.');
+        if (operator === 'like' && typeof value.value !== 'string')
+          throw new Error('queryBuilder: like pattern must be a string.');
+        query[where](predicateColumn(value.column), comparisonOperators[operator as ComparisonOperator], scalar(value.value));
         break;
       }
       case 'collection': {
         record(value, ['kind', 'operator', 'column', 'values'], 'collection');
         if (value.operator !== 'inArray') throw new Error('queryBuilder: unsupported collection operator.');
-        const column = identifier(value.column);
+        const column = predicateColumn(value.column);
         const values = array(value.values, 'inArray values', true).map(scalar);
-        if (values.length) query.whereIn(column, values);
-        else query.whereRaw('1 = 0');
+        if (values.length) query[where](column, 'in', values as Knex.Value);
+        else query[`${where}Raw`]('1 = 0');
+        break;
+      }
+      case 'null': {
+        record(value, ['kind', 'operator', 'column'], 'null predicate');
+        if (value.operator !== 'isNull' && value.operator !== 'isNotNull')
+          throw new Error('queryBuilder: unsupported null operator.');
+        query[where](predicateColumn(value.column), value.operator === 'isNull' ? 'is' : 'is not', null);
         break;
       }
       case 'group': {
         record(value, ['kind', 'operator', 'predicates'], 'group');
-        if (value.operator !== 'allOf') throw new Error('queryBuilder: unsupported group operator.');
-        const children = array(value.predicates, 'allOf predicates');
-        query.where((group) => {
+        if (value.operator !== 'allOf' && value.operator !== 'anyOf') throw new Error('queryBuilder: unsupported group operator.');
+        const children = array(value.predicates, `${value.operator} predicates`);
+        const useOr = value.operator === 'anyOf';
+        query[where]((group) => {
           group.queryContext(identifiers);
-          for (const child of children) predicate(group, child, depth + 1);
+          for (const child of children) predicate(group, child, depth + 1, useOr);
         });
         break;
       }
@@ -124,10 +194,11 @@ export function compileQuery(input: unknown): CompiledQuery {
   const query = client.queryBuilder().queryContext(identifiers);
   switch (spec.kind) {
     case 'select': {
-      record(spec, ['kind', 'from', 'columns', 'where', 'orderBy', 'limit'], 'select');
+      record(spec, ['kind', 'from', 'columns', 'where', 'groupBy', 'orderBy', 'limit'], 'select');
       const columns = spec.columns === '*' ? '*' : array(spec.columns, 'select columns').map(selection);
       query.select(columns).from(identifier(spec.from));
       if (Object.hasOwn(spec, 'where')) predicate(query, spec.where);
+      if (Object.hasOwn(spec, 'groupBy')) query.groupBy(array(spec.groupBy, 'groupBy columns').map(identifier));
       if (Object.hasOwn(spec, 'orderBy')) {
         for (const input of array(spec.orderBy, 'orderBy')) {
           const order = record(input, ['column', 'direction'], 'orderBy entry');
@@ -143,37 +214,59 @@ export function compileQuery(input: unknown): CompiledQuery {
       }
       break;
     }
-    case 'insert': {
-      record(spec, ['kind', 'into', 'rows'], 'insert');
+    case 'insert':
+    case 'upsert': {
+      const isUpsert = spec.kind === 'upsert';
+      record(spec, isUpsert ? ['kind', 'into', 'row', 'updateColumns'] : ['kind', 'into', 'rows'], spec.kind);
       const table = identifier(spec.into);
-      const rows = array(spec.rows, 'insert rows').map(valuesMap);
+      const rows = isUpsert ? [valuesMap(spec.row)] : array(spec.rows, 'insert rows').map(valuesMap);
       const { keys } = rows[0];
       const columns = keys.map(part);
       query.table(table).insert(rows.map((row) => {
         if (row.keys.length !== keys.length || row.keys.some((key, index) => key !== keys[index]))
           throw new Error('queryBuilder: insert rows must have the same column names.');
         const values: Record<string, unknown> = {};
-        for (let i = 0; i < keys.length; i++) values[columns[i]] = scalar(row.values[keys[i]]);
+        for (let i = 0; i < keys.length; i++) values[columns[i]] = writeValue(row.values[keys[i]]);
         return values;
       }));
+      if (isUpsert) {
+        const updates = array(spec.updateColumns, 'upsert update columns').map((column) => {
+          if (typeof column !== 'string' || !Object.hasOwn(rows[0].values, column))
+            throw new Error('queryBuilder: upsert update columns must be present in the row.');
+          return column;
+        });
+        if (new Set(updates).size !== updates.length)
+          throw new Error('queryBuilder: upsert update columns must be unique.');
+        query.onConflict().merge(updates.map(part));
+      }
       break;
     }
-    case 'update': {
-      record(spec, ['kind', 'table', 'values', 'where', 'allowAll'], 'update');
-      if (Object.hasOwn(spec, 'allowAll') && typeof spec.allowAll !== 'boolean')
+    case 'update':
+    case 'delete': {
+      const kind = spec.kind;
+      const fields = ['kind', 'table', 'where', 'allowAll'];
+      if (kind === 'update') fields.push('values');
+      record(spec, fields, kind);
+      const allowAll = Object.hasOwn(spec, 'allowAll') ? spec.allowAll : false;
+      if (typeof allowAll !== 'boolean')
         throw new Error('queryBuilder: allowAll must be a boolean.');
-      if (!Object.hasOwn(spec, 'where') && spec.allowAll !== true)
-        throw new Error('queryBuilder: update requires a predicate or allowAll().');
-      const table = identifier(spec.table);
-      const { values, keys } = valuesMap(spec.values);
-      const updates: Record<string, unknown> = {};
-      for (const key of keys) updates[part(key)] = scalar(values[key]);
-      query.table(table).update(updates);
-      if (Object.hasOwn(spec, 'where')) predicate(query, spec.where);
+      const hasWhere = Object.hasOwn(spec, 'where');
+      if (!hasWhere && !allowAll)
+        throw new Error(`queryBuilder: ${kind} requires a predicate or allowAll().`);
+      query.table(identifier(spec.table));
+      if (kind === 'update') {
+        const { values, keys } = valuesMap(spec.values);
+        const updates: Record<string, unknown> = {};
+        for (const key of keys) updates[part(key)] = writeValue(values[key]);
+        query.update(updates);
+      } else {
+        query.delete();
+      }
+      if (hasWhere) predicate(query, spec.where);
       break;
     }
     default:
-      throw new Error('queryBuilder: unsupported statement kind; expected select, insert, or update.');
+      throw new Error('queryBuilder: unsupported statement kind. Expected select, insert, upsert, update, or delete.');
   }
 
   const { sql, bindings } = query.toSQL();

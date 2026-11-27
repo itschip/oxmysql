@@ -27,7 +27,8 @@ end
 
 local type = type
 local oxmysql = exports.oxmysql
-local Builder = {}
+local null = {}
+local Builder = { NULL = null }
 
 local function builderRecord(value, fields, label)
 	assert(type(value) == 'table' and getmetatable(value) == nil, 'queryBuilder: ' .. label .. ' must be a plain table')
@@ -69,10 +70,15 @@ end
 
 local function builderValues(values)
 	assert(type(values) == 'table' and getmetatable(values) == nil and next(values) ~= nil,
-		'queryBuilder: values must be a non-empty plain table of column names and scalar values')
+		'queryBuilder: values must be a non-empty plain table of column names and values')
 	local result = {}
 	for column, value in pairs(values) do
-		result[identifierPart(column)] = builderValue(value)
+		local key = identifierPart(column)
+		if rawequal(value, null) then
+			result[key] = { kind = 'null' }
+		else
+			result[key] = builderValue(value)
+		end
 	end
 	return result
 end
@@ -93,68 +99,131 @@ local function copyIdentifier(value)
 	return { kind = 'identifier', parts = builderArray(value.parts, 'identifier parts', identifierPart) }
 end
 
-local function copySelectionExpression(value)
-	builderRecord(value, { kind = true, parts = true, name = true, column = true }, 'selection expression')
-	if value.kind == 'identifier' then return copyIdentifier(value) end
-
-	builderRecord(value, { kind = true, name = true, column = true }, 'selection function')
-	assert(value.kind == 'function' and value.name == 'unixTimestamp', 'queryBuilder: unsupported selection function')
-	return { kind = 'function', name = 'unixTimestamp', column = copyIdentifier(value.column) }
+function Builder.raw(sql, bindings)
+	assert(type(sql) == 'string' and sql:find('%S'), 'queryBuilder: raw SQL must be a non-empty string')
+	if bindings ~= nil then
+		bindings = builderArray(bindings, 'raw bindings', builderValue, true)
+		if #bindings == 0 then bindings = nil end
+	end
+	return { kind = 'raw', sql = sql, bindings = bindings }
 end
 
-local function copyAliasedSelection(value)
-	builderRecord(value, { kind = true, expression = true, alias = true }, 'aliased selection')
-	assert(value.kind == 'alias', 'queryBuilder: unsupported selection kind')
-	return { kind = 'alias', expression = copySelectionExpression(value.expression), alias = identifierPart(value.alias) }
+local function copyRaw(value)
+	builderRecord(value, { kind = true, sql = true, bindings = true }, 'raw expression')
+	return Builder.raw(value.sql, value.bindings)
+end
+
+local function columnExpression(value)
+	if type(value) == 'string' then return builderIdentifier(value) end
+	if type(value) == 'table' and rawget(value, 'kind') == 'raw' then return copyRaw(value) end
+	return copyIdentifier(value)
+end
+
+local function aggregateColumn(sql, column)
+	builderIdentifier(column)
+	return Builder.raw(sql, { column })
 end
 
 Builder.fn = {
 	unixTimestamp = function(column)
 		return { kind = 'function', name = 'unixTimestamp', column = builderIdentifier(column) }
 	end,
+	count = function(column)
+		if column == nil then return Builder.raw('count(*)') end
+		return aggregateColumn('count(??)', column)
+	end,
+	sum = function(column)
+		return aggregateColumn('sum(??)', column)
+	end,
+	max = function(column)
+		return aggregateColumn('max(??)', column)
+	end,
 }
 
 function Builder.as(expression, alias)
-	if type(expression) == 'string' then expression = builderIdentifier(expression) end
-	return copyAliasedSelection({ kind = 'alias', expression = expression, alias = alias })
+	if type(expression) == 'table' and rawget(expression, 'kind') == 'function' then
+		builderRecord(expression, { kind = true, name = true, column = true }, 'selection function')
+		assert(expression.name == 'unixTimestamp', 'queryBuilder: unsupported selection function')
+		expression = { kind = 'function', name = 'unixTimestamp', column = copyIdentifier(expression.column) }
+	else
+		expression = columnExpression(expression)
+	end
+	return { kind = 'alias', expression = expression, alias = identifierPart(alias) }
+end
+
+local function copySelection(value)
+	if type(value) == 'table' and rawget(value, 'kind') == 'alias' then
+		builderRecord(value, { kind = true, expression = true, alias = true }, 'aliased selection')
+		return Builder.as(value.expression, value.alias)
+	end
+	return columnExpression(value)
+end
+
+local comparisonOperators = { eq = true, ne = true, gt = true, gte = true, lt = true, lte = true, like = true }
+
+local function comparisonPredicate(operator, column, value)
+	assert(operator ~= 'like' or type(value) == 'string', 'queryBuilder: like pattern must be a string')
+	return { kind = 'comparison', operator = operator, column = columnExpression(column), value = builderValue(value) }
 end
 
 local function copyPredicate(value, depth)
 	depth = depth or 0
 	assert(depth < 64, 'queryBuilder: predicate nesting exceeds 64 levels')
+	if type(value) == 'table' and rawget(value, 'kind') == 'raw' then return copyRaw(value) end
 	builderRecord(value, { kind = true, operator = true, column = true, value = true, values = true, predicates = true }, 'predicate')
 	if value.kind == 'comparison' then
 		builderRecord(value, { kind = true, operator = true, column = true, value = true }, 'comparison')
-		assert(value.operator == 'eq', 'queryBuilder: unsupported comparison operator')
-		return { kind = 'comparison', operator = 'eq', column = copyIdentifier(value.column), value = builderValue(value.value) }
+		assert(comparisonOperators[value.operator], 'queryBuilder: unsupported comparison operator')
+		return comparisonPredicate(value.operator, value.column, value.value)
 	elseif value.kind == 'collection' then
 		builderRecord(value, { kind = true, operator = true, column = true, values = true }, 'collection')
 		assert(value.operator == 'inArray', 'queryBuilder: unsupported collection operator')
-		return { kind = 'collection', operator = 'inArray', column = copyIdentifier(value.column), values = builderArray(value.values, 'inArray values', builderValue, true) }
+		return { kind = 'collection', operator = 'inArray', column = columnExpression(value.column), values = builderArray(value.values, 'inArray values', builderValue, true) }
+	elseif value.kind == 'null' then
+		builderRecord(value, { kind = true, operator = true, column = true }, 'null predicate')
+		assert(value.operator == 'isNull' or value.operator == 'isNotNull', 'queryBuilder: unsupported null operator')
+		return { kind = 'null', operator = value.operator, column = columnExpression(value.column) }
 	elseif value.kind == 'group' then
 		builderRecord(value, { kind = true, operator = true, predicates = true }, 'group')
-		assert(value.operator == 'allOf', 'queryBuilder: unsupported group operator')
-		return { kind = 'group', operator = 'allOf', predicates = builderArray(value.predicates, 'allOf predicates', function(child)
+		assert(value.operator == 'allOf' or value.operator == 'anyOf', 'queryBuilder: unsupported group operator')
+		local predicates = builderArray(value.predicates, value.operator .. ' predicates', function(child)
 			return copyPredicate(child, depth + 1)
-		end) }
+		end)
+		return { kind = 'group', operator = value.operator, predicates = predicates }
 	end
 
 	error('queryBuilder: unsupported predicate kind')
 end
 
+local function groupPredicate(operator, ...)
+	local predicates = { ... }
+	assert(select('#', ...) == #predicates, 'queryBuilder: ' .. operator .. ' requires non-nil predicates')
+	return { kind = 'group', operator = operator, predicates = builderArray(predicates, operator .. ' predicates', copyPredicate) }
+end
+
 Builder.op = {
-	eq = function(column, value)
-		return { kind = 'comparison', operator = 'eq', column = builderIdentifier(column), value = builderValue(value) }
-	end,
 	inArray = function(column, values)
-		return { kind = 'collection', operator = 'inArray', column = builderIdentifier(column), values = builderArray(values, 'inArray values', builderValue, true) }
+		return { kind = 'collection', operator = 'inArray', column = columnExpression(column), values = builderArray(values, 'inArray values', builderValue, true) }
+	end,
+	isNull = function(column)
+		return { kind = 'null', operator = 'isNull', column = columnExpression(column) }
+	end,
+	isNotNull = function(column)
+		return { kind = 'null', operator = 'isNotNull', column = columnExpression(column) }
 	end,
 	allOf = function(...)
-		local predicates = { ... }
-		assert(select('#', ...) == #predicates, 'queryBuilder: allOf requires non-nil predicates')
-		return { kind = 'group', operator = 'allOf', predicates = builderArray(predicates, 'allOf predicates', copyPredicate) }
+		return groupPredicate('allOf', ...)
+	end,
+	anyOf = function(...)
+		return groupPredicate('anyOf', ...)
 	end,
 }
+
+for operator in pairs(comparisonOperators) do
+	Builder.op[operator] = function(column, value)
+		return comparisonPredicate(operator, column, value)
+	end
+end
 
 local builderStates = setmetatable({}, { __mode = 'k' })
 local builderMethods = {}
@@ -186,10 +255,7 @@ end
 
 function builderMethods:select(columns)
 	local spec = copyState(self)
-	spec.columns = builderArray(columns, 'select columns', function(value)
-		if type(value) == 'string' then return builderIdentifier(value) end
-		return copyAliasedSelection(value)
-	end)
+	spec.columns = builderArray(columns, 'select columns', copySelection)
 	return newBuilder(spec)
 end
 
@@ -198,7 +264,7 @@ function builderMethods:where(predicate)
 	predicate = copyPredicate(predicate)
 	if spec.where then
 		local predicates = {}
-		if spec.where.kind == 'group' then
+		if spec.where.kind == 'group' and spec.where.operator == 'allOf' then
 			for index, child in ipairs(spec.where.predicates) do predicates[index] = child end
 		else
 			predicates[1] = spec.where
@@ -208,6 +274,20 @@ function builderMethods:where(predicate)
 	else
 		spec.where = predicate
 	end
+	return newBuilder(spec)
+end
+
+function builderMethods:groupBy(...)
+	local count = select('#', ...)
+	assert(count > 0, 'queryBuilder: groupBy requires at least one column')
+
+	local spec = copyState(self)
+	local columns = {}
+	for index, column in ipairs(spec.groupBy or {}) do columns[index] = column end
+	for index = 1, count do
+		columns[#columns + 1] = builderIdentifier(select(index, ...))
+	end
+	spec.groupBy = columns
 	return newBuilder(spec)
 end
 
@@ -247,15 +327,13 @@ end
 
 local function selectSpec(builder, first)
 	local spec = copyState(builder)
-	assert(spec.allowAll == nil, 'queryBuilder: allowAll() is only supported for update')
+	assert(spec.allowAll == nil, 'queryBuilder: allowAll() is only supported for update and delete')
 	spec.from = copyIdentifier(spec.from)
 	if spec.columns ~= '*' then
-		spec.columns = builderArray(spec.columns, 'select columns', function(value)
-			if value.kind == 'identifier' then return copyIdentifier(value) end
-			return copyAliasedSelection(value)
-		end)
+		spec.columns = builderArray(spec.columns, 'select columns', copySelection)
 	end
 	if spec.where then spec.where = copyPredicate(spec.where) end
+	if spec.groupBy then spec.groupBy = builderArray(spec.groupBy, 'groupBy columns', copyIdentifier) end
 	if spec.orderBy then
 		spec.orderBy = builderArray(spec.orderBy, 'orderBy', function(entry)
 			return { column = copyIdentifier(entry.column), direction = entry.direction }
@@ -275,8 +353,9 @@ end
 
 local function mutationState(builder)
 	local spec = copyState(builder)
-	assert(spec.columns == '*' and spec.limit == nil, 'queryBuilder: insert/update do not support select() or limit()')
-	assert(spec.orderBy == nil, 'queryBuilder: insert/update do not support orderBy()')
+	assert(spec.columns == '*' and spec.limit == nil, 'queryBuilder: mutations do not support select() or limit()')
+	assert(spec.groupBy == nil, 'queryBuilder: mutations do not support groupBy()')
+	assert(spec.orderBy == nil, 'queryBuilder: mutations do not support orderBy()')
 	return spec
 end
 
@@ -301,13 +380,40 @@ function builderMethods:insert(values, cb)
 	return executeBuilder({ kind = 'insert', into = copyIdentifier(state.from), rows = rows }, 'insert', cb)
 end
 
-function builderMethods:update(values, cb)
+function builderMethods:upsert(row, updateColumns, cb)
 	local state = mutationState(self)
-	assert(state.where ~= nil or state.allowAll == true, 'queryBuilder: update requires a predicate or allowAll()')
-	local spec = { kind = 'update', table = copyIdentifier(state.from), values = builderValues(values) }
+	assert(state.where == nil and state.allowAll == nil, 'queryBuilder: upsert does not support where() or allowAll()')
+
+	local values = builderValues(row)
+	local seen = {}
+	local columns = builderArray(updateColumns, 'upsert update columns', function(column)
+		column = identifierPart(column)
+		assert(values[column] ~= nil, 'queryBuilder: upsert update columns must be present in the row')
+		assert(not seen[column], 'queryBuilder: upsert update columns must be unique')
+		seen[column] = true
+		return column
+	end)
+
+	local spec = { kind = 'upsert', into = copyIdentifier(state.from), row = values, updateColumns = columns }
+	return executeBuilder(spec, 'upsert', cb)
+end
+
+local function filteredMutationSpec(builder, kind)
+	local state = mutationState(builder)
+	assert(state.where ~= nil or state.allowAll == true, 'queryBuilder: ' .. kind .. ' requires a predicate or allowAll()')
+	local spec = { kind = kind, table = copyIdentifier(state.from), allowAll = state.allowAll }
 	if state.where then spec.where = copyPredicate(state.where) end
-	if state.allowAll then spec.allowAll = true end
+	return spec
+end
+
+function builderMethods:update(values, cb)
+	local spec = filteredMutationSpec(self, 'update')
+	spec.values = builderValues(values)
 	return executeBuilder(spec, 'update', cb)
+end
+
+function builderMethods:delete(cb)
+	return executeBuilder(filteredMutationSpec(self, 'delete'), 'delete', cb)
 end
 
 _ENV.Builder = Builder
