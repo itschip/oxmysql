@@ -18,24 +18,29 @@ export const rawQuery = async (
   cb?: CFXCallback,
   isPromise?: boolean,
   connectionId?: number,
-  builderDebug = false,
+  builder?: { debug: boolean },
 ) => {
   cb = setCallback(parameters, cb);
-  try {
-    [query, parameters] = parseArguments(query, parameters);
-  } catch (err: any) {
-    return logError(invokingResource, cb, isPromise, err, query, parameters);
+  if (!builder) {
+    try {
+      [query, parameters] = parseArguments(query, parameters);
+    } catch (err: any) {
+      return logError(invokingResource, cb, isPromise, err, query, parameters);
+    }
   }
 
   await using connection = await getConnection(connectionId);
 
   if (!connection) return;
 
+  const builderDebug = builder?.debug ?? false;
   let queryStartedAt: number | undefined;
   try {
     const hasProfiler = await runProfiler(connection, invokingResource);
     if (!hasProfiler || builderDebug) queryStartedAt = performance.now();
-    const result = await connection.query(query, parameters);
+    const result = builder
+      ? await connection.execute(query, parameters, { preserveQueryTypes: true })
+      : await connection.query(query, parameters);
     let executionTime = queryStartedAt === undefined ? undefined : performance.now() - queryStartedAt;
     queryStartedAt = undefined;
     const builderExecutionTime = builderDebug ? executionTime : undefined;

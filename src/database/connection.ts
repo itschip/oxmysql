@@ -1,9 +1,10 @@
 import type { Connection, PoolConnection } from 'mysql2/promise';
+import { TypedParameter } from 'mysql2';
 import { scheduleTick } from '../utils/scheduleTick';
 import { sleep } from '../utils/sleep';
 import { pool } from './pool';
 import type { CFXParameters } from 'types';
-import { typeCastExecute } from 'utils/typeCast';
+import { typeCastExecute, typeCastPreparedQuery } from 'utils/typeCast';
 
 (Symbol as any).dispose ??= Symbol('Symbol.dispose');
 (Symbol as any).asyncDispose ??= Symbol('Symbol.asyncDispose');
@@ -13,6 +14,21 @@ const activeConnections: Record<string, MySql> = {};
 interface PromisePoolConnection extends Connection {
   connection: PoolConnection;
   release: PoolConnection['release'];
+}
+
+function prepareQueryValue(value: unknown) {
+  if (typeof value !== 'number') return value;
+  if (Number.isSafeInteger(value)) return TypedParameter.BIGINT(value);
+
+  // Match the numeric literal types that query() previously sent to the server.
+  const literal = value.toString();
+  if (literal.includes('e')) return value;
+  if (Number.isInteger(value)) {
+    const integer = BigInt(literal);
+    if (integer >= -(1n << 63n) && integer < (1n << 63n)) return TypedParameter.BIGINT(literal);
+    if (integer >= 0n && integer < (1n << 64n)) return TypedParameter.BIGINT.unsigned(literal);
+  }
+  return TypedParameter.DECIMAL(literal);
 }
 
 export class MySql {
@@ -33,13 +49,13 @@ export class MySql {
     return result;
   }
 
-  async execute(query: string, values: CFXParameters = []) {
+  async execute(query: string, values: CFXParameters = [], options?: { preserveQueryTypes: boolean }) {
     scheduleTick();
 
     const [result] = await this.connection.execute({
       sql: query,
-      values: values,
-      typeCast: typeCastExecute,
+      values: options?.preserveQueryTypes ? values.map(prepareQueryValue) : values,
+      typeCast: options?.preserveQueryTypes ? typeCastPreparedQuery : typeCastExecute,
     });
     return result;
   }

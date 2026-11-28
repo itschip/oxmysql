@@ -19,7 +19,7 @@ const comparisonOperators = {
   like: 'like',
 } as const satisfies Record<ComparisonOperator, string>;
 
-// mysql2 also substitutes question marks inside quoted text and comments.
+// Knex also substitutes question marks inside quoted text and comments.
 const rawSqlTokens = new RegExp([
   /'(?:\\.|[^'\\])*(?:'|$)|"(?:\\.|[^"\\])*(?:"|$)/.source, // strings
   /`[^`]*(?:`|$)/.source, // quoted identifiers
@@ -65,13 +65,14 @@ export function compileQuery(input: unknown): CompiledQuery {
     identifiers[token] = value;
     return token;
   };
-  const scalar = (value: unknown): string | boolean | number => {
+  const scalar = (value: unknown): string | number | Knex.Raw => {
     if (typeof value !== 'string' && typeof value !== 'boolean' && !(typeof value === 'number' && Number.isFinite(value)))
       throw new Error('queryBuilder: values must be non-null strings, booleans, or finite numbers.');
-    return value;
+    // A bound boolean is a TINYINT. A boolean expression also retains its meaning in JSON functions.
+    return typeof value === 'boolean' ? client.raw('(? <> 0)', [value]) : value;
   };
 
-  const writeValue = (value: unknown): string | boolean | number | null => {
+  const writeValue = (value: unknown): ReturnType<typeof scalar> | null => {
     if (value && typeof value === 'object') {
       const marker = record(value, ['kind'], 'write value');
       if (Object.hasOwn(marker, 'kind') && marker.kind === 'null') return null;
@@ -100,7 +101,16 @@ export function compileQuery(input: unknown): CompiledQuery {
 
     const parameters = placeholders.map((placeholder, index) => {
       const binding = bindings[index];
-      if (placeholder === '?') return scalar(binding);
+      if (placeholder === '?') {
+        const parameter = scalar(binding);
+        if (typeof parameter !== 'number' || Number.isInteger(parameter)) return parameter;
+        const literal = parameter.toString();
+        if (literal.includes('e')) return parameter;
+
+        // MySQL otherwise widens the scale of DECIMAL parameters in raw arithmetic.
+        const [whole, fractional] = literal.replace(/^-/, '').split('.');
+        return client.raw(`cast(? as decimal(${whole.length + fractional.length}, ${fractional.length}))`, [parameter]);
+      }
       if (typeof binding !== 'string') throw new Error('queryBuilder: ?? requires a column identifier string.');
       return binding.split('.').map(part).join('.');
     });

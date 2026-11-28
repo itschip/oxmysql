@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeEach, spyOn } from 'bun:test';
+import { TypedParameter } from 'mysql2';
 import { resetNatives, setConvar } from '../../setup';
 import { resetDb, setConnectionFactory, createFakeConnection, type FakeConnection } from '../../helpers/db';
 import * as config from 'config';
@@ -31,6 +32,27 @@ describe('rawQuery', () => {
     let received: unknown;
     await rawQuery('single', 'res', 'SELECT * FROM t WHERE id = ?', [1], (r) => (received = r));
     expect(received).toEqual({ a: 1 });
+  });
+
+  test('builder uses prepared execution with query result semantics even with timing disabled', async () => {
+    conn.queue.push([{ id: 1 }, { id: 2 }]);
+    const bindings = [42, 1.25, 1e-7, 9007199254741000, 18446744073709550000, 18446744073709552000, true, null, 'foo'];
+    const sql = `SELECT ${bindings.map(() => '?').join(', ')}`;
+    const result = await rawQuery('single', 'res', sql, bindings, undefined, undefined, undefined, { debug: false });
+
+    expect(result).toEqual({ id: 1 });
+    expect(conn.ops()).toEqual(['execute', 'release']);
+    expect(conn.calls[0].arg.values).toEqual([
+      TypedParameter.BIGINT(42),
+      TypedParameter.DECIMAL('1.25'),
+      1e-7,
+      TypedParameter.BIGINT('9007199254741000'),
+      TypedParameter.BIGINT.unsigned('18446744073709550000'),
+      TypedParameter.DECIMAL('18446744073709552000'),
+      true,
+      null,
+      'foo',
+    ]);
   });
 
   test('scalar returns the first column of the first row', async () => {

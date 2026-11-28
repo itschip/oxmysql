@@ -1,10 +1,11 @@
 import { describe, test, expect, mock } from 'bun:test';
-import { typeCast, typeCastExecute } from 'utils/typeCast';
+import { typeCast, typeCastExecute, typeCastPreparedQuery } from 'utils/typeCast';
 
 type FieldOpts = {
   type: string;
   length?: number;
   charset?: number;
+  decimals?: number;
   string?: () => string | null;
   buffer?: () => Buffer | null;
 };
@@ -14,6 +15,7 @@ function field(opts: FieldOpts) {
     type: opts.type,
     length: opts.length ?? 0,
     charset: opts.charset ?? 33, // utf8 by default
+    decimals: opts.decimals,
     string: opts.string ?? (() => null),
     buffer: opts.buffer ?? (() => null),
   } as any;
@@ -105,5 +107,22 @@ describe('typeCastExecute (binary protocol)', () => {
     const next = mock(() => 'native');
     expect(typeCastExecute(field({ type: 'BLOB', charset: BINARY_CHARSET }), next)).toBe('native');
     expect(next).toHaveBeenCalled();
+  });
+});
+
+describe('typeCastPreparedQuery', () => {
+  test('keeps query booleans and binary value types', () => {
+    const next = mock(() => 'unused');
+    const bytes = Buffer.from([0, 255]);
+    expect(typeCastPreparedQuery(field({ type: 'TINY', length: 1, string: () => '0' }), next)).toBe(false);
+    expect(typeCastPreparedQuery(field({ type: 'VAR_STRING', charset: BINARY_CHARSET, buffer: () => bytes }), next)).toBe(bytes);
+    expect(typeCastPreparedQuery(field({ type: 'BLOB', charset: BINARY_CHARSET, buffer: () => null }), next)).toEqual([null]);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('preserves text-protocol FLOAT precision and nulls', () => {
+    expect(typeCastPreparedQuery(field({ type: 'FLOAT', decimals: 31 }), () => 123456.5)).toBe(123456);
+    expect(typeCastPreparedQuery(field({ type: 'FLOAT', decimals: 4 }), () => Math.fround(1.2346))).toBe(1.2346);
+    expect(typeCastPreparedQuery(field({ type: 'FLOAT' }), () => null)).toBeNull();
   });
 });

@@ -41,6 +41,6 @@ export async function executeBuilderQuery(
     cb,
     isPromise,
     undefined,
-    mysql_builder_debug,
+    { debug: mysql_builder_debug },
   );
 }
