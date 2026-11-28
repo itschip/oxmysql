@@ -125,4 +125,10 @@ describe('typeCastPreparedQuery', () => {
     expect(typeCastPreparedQuery(field({ type: 'FLOAT', decimals: 4 }), () => Math.fround(1.2346))).toBe(1.2346);
     expect(typeCastPreparedQuery(field({ type: 'FLOAT' }), () => null)).toBeNull();
   });
+
+  test('rounds a fixed-scale DOUBLE to its declared scale', () => {
+    const value = -8.900000000311437e-7;
+    expect(typeCastPreparedQuery(field({ type: 'DOUBLE', decimals: 8 }), () => value)).toBe(-8.9e-7);
+    expect(typeCastPreparedQuery(field({ type: 'DOUBLE', decimals: 31 }), () => value)).toBe(value);
+  });
 });

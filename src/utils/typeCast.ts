@@ -5,7 +5,7 @@ type FieldWithMetadata = TypeCastField & { charset?: number; decimals?: number }
 
 const floatRounding = { useGrouping: false, roundingMode: 'halfEven' } as const;
 const floatFormat = new Intl.NumberFormat('en-US', { ...floatRounding, maximumSignificantDigits: 6 });
-const fixedFloatFormats: Intl.NumberFormat[] = [];
+const fixedScaleFormats: Intl.NumberFormat[] = [];
 
 /**
  * node-mysql2 v3.9.0 introduced (breaking) typecasting for execute methods.
@@ -77,18 +77,20 @@ export function typeCast(field: FieldWithMetadata, next: TypeCastNext) {
 
 export function typeCastPreparedQuery(field: FieldWithMetadata, next: TypeCastNext) {
   switch (field.type) {
-    case 'FLOAT': {
+    case 'FLOAT':
+    case 'DOUBLE': {
       const value = next();
       if (typeof value !== 'number') return value;
 
-      // Match text-protocol FLOAT precision, including columns with a fixed scale.
+      // The text protocol rounds fixed-scale columns to their declared scale.
       const { decimals } = field;
-      const format = decimals !== undefined && decimals < 31
-        ? (fixedFloatFormats[decimals] ??= new Intl.NumberFormat('en-US', {
-          ...floatRounding,
-          maximumFractionDigits: decimals,
-        }))
-        : floatFormat;
+      if (decimals === undefined || decimals >= 31) {
+        return field.type === 'FLOAT' ? Number(floatFormat.format(value)) : value;
+      }
+      const format = (fixedScaleFormats[decimals] ??= new Intl.NumberFormat('en-US', {
+        ...floatRounding,
+        maximumFractionDigits: decimals,
+      }));
       return Number(format.format(value));
     }
     case 'VARCHAR':
