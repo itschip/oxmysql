@@ -1,10 +1,10 @@
-import type { Connection, PoolConnection } from 'mysql2/promise';
+import type { Connection, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import { TypedParameter } from 'mysql2';
 import { scheduleTick } from '../utils/scheduleTick';
 import { sleep } from '../utils/sleep';
 import { pool } from './pool';
 import type { CFXParameters } from 'types';
-import { typeCastExecute, typeCastPreparedQuery } from 'utils/typeCast';
+import { roundPreparedNumbers, typeCastExecute, typeCastPreparedQuery } from 'utils/typeCast';
 
 (Symbol as any).dispose ??= Symbol('Symbol.dispose');
 (Symbol as any).asyncDispose ??= Symbol('Symbol.asyncDispose');
@@ -52,11 +52,14 @@ export class MySql {
   async execute(query: string, values: CFXParameters = [], options?: { preserveQueryTypes: boolean }) {
     scheduleTick();
 
-    const [result] = await this.connection.execute({
+    const [result, fields] = await this.connection.execute({
       sql: query,
       values: options?.preserveQueryTypes ? values.map(prepareQueryValue) : values,
       typeCast: options?.preserveQueryTypes ? typeCastPreparedQuery : typeCastExecute,
     });
+    if (options?.preserveQueryTypes && Array.isArray(result) && result.length && fields?.length) {
+      roundPreparedNumbers(result as RowDataPacket[], fields, this.connection.config);
+    }
     return result;
   }
 

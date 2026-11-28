@@ -1,7 +1,9 @@
-import type { TypeCastField, TypeCastNext } from 'mysql2/promise';
+import { Types } from 'mysql2';
+import type { ConnectionOptions, FieldPacket, RowDataPacket, TypeCastField, TypeCastNext } from 'mysql2/promise';
 
 const BINARY_CHARSET = 63;
-type FieldWithMetadata = TypeCastField & { charset?: number; decimals?: number };
+const UNSPECIFIED_SCALE = 31;
+type FieldWithCharset = TypeCastField & { charset?: number };
 
 const floatRounding = { useGrouping: false, roundingMode: 'halfEven' } as const;
 const floatFormat = new Intl.NumberFormat('en-US', { ...floatRounding, maximumSignificantDigits: 6 });
@@ -32,7 +34,7 @@ export function typeCastExecute(field: TypeCastField, next: TypeCastNext) {
 /**
  * mysql-async compatible typecasting.
  */
-export function typeCast(field: FieldWithMetadata, next: TypeCastNext) {
+export function typeCast(field: FieldWithCharset, next: TypeCastNext) {
   switch (field.type) {
     case 'DATETIME':
     case 'DATETIME2':
@@ -75,24 +77,8 @@ export function typeCast(field: FieldWithMetadata, next: TypeCastNext) {
   }
 }
 
-export function typeCastPreparedQuery(field: FieldWithMetadata, next: TypeCastNext) {
+export function typeCastPreparedQuery(field: FieldWithCharset, next: TypeCastNext) {
   switch (field.type) {
-    case 'FLOAT':
-    case 'DOUBLE': {
-      const value = next();
-      if (typeof value !== 'number') return value;
-
-      // The text protocol rounds fixed-scale columns to their declared scale.
-      const { decimals } = field;
-      if (decimals === undefined || decimals >= 31) {
-        return field.type === 'FLOAT' ? Number(floatFormat.format(value)) : value;
-      }
-      const format = (fixedScaleFormats[decimals] ??= new Intl.NumberFormat('en-US', {
-        ...floatRounding,
-        maximumFractionDigits: decimals,
-      }));
-      return Number(format.format(value));
-    }
     case 'VARCHAR':
     case 'VAR_STRING':
     case 'STRING':
@@ -101,4 +87,40 @@ export function typeCastPreparedQuery(field: FieldWithMetadata, next: TypeCastNe
       if (field.charset === BINARY_CHARSET) return field.buffer();
   }
   return typeCast(field, next);
+}
+
+export function roundPreparedNumbers(
+  rows: RowDataPacket[],
+  fields: FieldPacket[],
+  { disableEval, nestTables, rowsAsArray }: Pick<ConnectionOptions, 'disableEval' | 'nestTables' | 'rowsAsArray'>,
+) {
+  const separator = typeof nestTables === 'string' ? nestTables : undefined;
+  const byIndex = rowsAsArray && (disableEval || (separator === undefined && nestTables !== true));
+  const byTable = !byIndex && nestTables === true;
+  const columnKey = (field: FieldPacket) => separator === undefined ? field.name : field.table + separator + field.name;
+
+  for (const [index, field] of fields.entries()) {
+    const { columnType, decimals } = field;
+    const fixedScale = decimals < UNSPECIFIED_SCALE;
+    if (columnType !== Types.FLOAT && !(columnType === Types.DOUBLE && fixedScale)) continue;
+
+    // With named columns, the driver only keeps the last value for a repeated name.
+    const key = byIndex ? index : columnKey(field);
+    const isLast = byIndex || fields.findLastIndex((other) =>
+      (!byTable || other.table === field.table) && columnKey(other) === key,
+    ) === index;
+    if (!isLast) continue;
+
+    const format = fixedScale
+      ? (fixedScaleFormats[decimals] ??= new Intl.NumberFormat('en-US', {
+        ...floatRounding,
+        maximumFractionDigits: decimals,
+      }))
+      : floatFormat;
+    for (const row of rows) {
+      const columns = byTable ? row[field.table] : row;
+      const value = columns?.[key];
+      if (typeof value === 'number') columns[key] = Number(format.format(value));
+    }
+  }
 }

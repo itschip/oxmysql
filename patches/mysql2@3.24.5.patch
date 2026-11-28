@@ -27,6 +27,7 @@ index f3fc11506d9a4eca4fa6142808e1aa5c4b3464b4..e3b077a2434610193b201bcf9c578b37
        case 'undefined':
          throw new TypeError('Bind parameters must not contain undefined');
 diff --git a/lib/parsers/binary_parser.js b/lib/parsers/binary_parser.js
+index 9a867d96a15678230eb919a88dd8ce4f3d37b491..0f5cefb2a95f34cd409dbd67dd369549d99c985a 100644
 --- a/lib/parsers/binary_parser.js
 +++ b/lib/parsers/binary_parser.js
 @@ -87,7 +87,7 @@ function readCodeFor(field, config, options, fieldNum) {
@@ -38,26 +39,14 @@ diff --git a/lib/parsers/binary_parser.js b/lib/parsers/binary_parser.js
        }
        return `packet.readLengthCodedString(fields[${fieldNum}].encoding)`;
    }
-@@ -106,6 +106,8 @@ function compile(fields, options, config) {
+@@ -106,6 +106,7 @@ function compile(fields, options, config) {
        db: field.schema,
        table: field.table,
        name: field.name,
 +      charset: field.characterSet,
-+      decimals: field.decimals,
      };
    }
  
-diff --git a/lib/parsers/static_binary_parser.js b/lib/parsers/static_binary_parser.js
---- a/lib/parsers/static_binary_parser.js
-+++ b/lib/parsers/static_binary_parser.js
-@@ -165,6 +165,7 @@ function getBinaryParser(fields, _options, config) {
-                     db: field.schema,
-                     table: field.table,
-                     name: field.name,
-+                    decimals: field.decimals,
-                     string: function (encoding = field.encoding) {
-                       if (
-                         field.columnType === Types.JSON &&
 diff --git a/lib/parsers/text_parser.js b/lib/parsers/text_parser.js
 index 1eb5efda88c4b010e61d48f0048a32b353fea369..8baadcb77ef3213698a41f345a9fcacd0b509b72 100644
 --- a/lib/parsers/text_parser.js

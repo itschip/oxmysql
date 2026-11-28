@@ -1,11 +1,12 @@
 import { describe, test, expect, mock } from 'bun:test';
-import { typeCast, typeCastExecute, typeCastPreparedQuery } from 'utils/typeCast';
+import { Types } from 'mysql2';
+import type { FieldPacket, RowDataPacket } from 'mysql2/promise';
+import { roundPreparedNumbers, typeCast, typeCastExecute, typeCastPreparedQuery } from 'utils/typeCast';
 
 type FieldOpts = {
   type: string;
   length?: number;
   charset?: number;
-  decimals?: number;
   string?: () => string | null;
   buffer?: () => Buffer | null;
 };
@@ -15,7 +16,6 @@ function field(opts: FieldOpts) {
     type: opts.type,
     length: opts.length ?? 0,
     charset: opts.charset ?? 33, // utf8 by default
-    decimals: opts.decimals,
     string: opts.string ?? (() => null),
     buffer: opts.buffer ?? (() => null),
   } as any;
@@ -120,15 +120,31 @@ describe('typeCastPreparedQuery', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  test('preserves text-protocol FLOAT precision and nulls', () => {
-    expect(typeCastPreparedQuery(field({ type: 'FLOAT', decimals: 31 }), () => 123456.5)).toBe(123456);
-    expect(typeCastPreparedQuery(field({ type: 'FLOAT', decimals: 4 }), () => Math.fround(1.2346))).toBe(1.2346);
-    expect(typeCastPreparedQuery(field({ type: 'FLOAT' }), () => null)).toBeNull();
+  test('rounds FLOAT columns using result metadata and respects duplicate aliases', () => {
+    const fields = [
+      { name: 'reading', columnType: Types.FLOAT, decimals: 31 },
+      { name: 'scaled', columnType: Types.FLOAT, decimals: 4 },
+      { name: 'missing', columnType: Types.FLOAT, decimals: 31 },
+      { name: 'duplicate', columnType: Types.FLOAT, decimals: 31 },
+      { name: 'duplicate', columnType: Types.DOUBLE, decimals: 31 },
+    ] as FieldPacket[];
+    const rows = [{ reading: 123456.5, scaled: Math.fround(1.2346), missing: null, duplicate: 123456.5 }] as RowDataPacket[];
+    roundPreparedNumbers(rows, fields, {});
+    expect(rows[0]).toEqual({ reading: 123456, scaled: 1.2346, missing: null, duplicate: 123456.5 } as RowDataPacket);
   });
 
-  test('rounds a fixed-scale DOUBLE to its declared scale', () => {
+  test('preserves the scale of DOUBLE columns with array and nested results', () => {
     const value = -8.900000000311437e-7;
-    expect(typeCastPreparedQuery(field({ type: 'DOUBLE', decimals: 8 }), () => value)).toBe(-8.9e-7);
-    expect(typeCastPreparedQuery(field({ type: 'DOUBLE', decimals: 31 }), () => value)).toBe(value);
+    const fields = [
+      { table: 'vehicle', name: 'scaled', columnType: Types.DOUBLE, decimals: 8 },
+      { table: 'details', name: 'scaled', columnType: Types.DOUBLE, decimals: 31 },
+    ] as FieldPacket[];
+    const byPosition = [[value, value]];
+    roundPreparedNumbers(byPosition as unknown as RowDataPacket[], fields, { rowsAsArray: true });
+    expect(byPosition).toEqual([[-8.9e-7, value]]);
+
+    const byTable = [{ vehicle: { scaled: value }, details: { scaled: value } }];
+    roundPreparedNumbers(byTable as RowDataPacket[], fields, { nestTables: true });
+    expect(byTable).toEqual([{ vehicle: { scaled: -8.9e-7 }, details: { scaled: value } }]);
   });
 });
